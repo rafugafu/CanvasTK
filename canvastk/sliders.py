@@ -334,9 +334,9 @@ class Progressbar(_Slider):
         self._animation_id = None
 
     def _animate(self, interval):
+        """Advance the animation one frame and schedule the next."""
         # Animation phase 0..2: the first half moves the chunk forward, the second half
         # back.
-        """Advance the animation one frame and schedule the next."""
         self._phase = (self._phase + 1 / 70) % 2
         self.schedule_redraw()
         self._animation_id = self.call_later(interval, lambda: self._animate(interval))

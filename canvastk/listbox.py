@@ -15,14 +15,15 @@ from ._core import (
 
 
 class Listbox(CanvasWidget):
-    # Marks the widget as scrolling itself, so a ScrolledFrame around it leaves the
-    # mouse wheel to the list.
     """A list of rows with single, multiple, or extended selection.
 
     Only the visible rows are drawn, so long lists stay cheap. Generates
     <<ListboxSelect>> when the user changes the selection. The `contents` argument
     is the initial list of items (shown with str()).
     """
+
+    # Marks the widget as scrolling itself, so a ScrolledFrame around it leaves the
+    # mouse wheel to the list.
 
     handles_wheel = True
     # Layout constants: inner margin and the width of the built-in scroll bar, in px.
@@ -250,9 +251,9 @@ class Listbox(CanvasWidget):
         self.schedule_redraw()
 
     def nearest(self, y):
+        """The row closest to a y coordinate in the widget (clamped to existing rows)."""
         # Row under y: offset inside the widget, in rows, plus the scrolled-off rows
         # above.
-        """The row closest to a y coordinate in the widget (clamped to existing rows)."""
         row = int((y - self.EDGE) // self._row_height()) + self._top
         return min(max(row, 0), max(len(self._items) - 1, 0))
 
@@ -460,6 +461,22 @@ class Listbox(CanvasWidget):
         return "break"
 
     # ---- drawing -------------------------------------------------------------------
+    def draw_row_content(self, row, top, bottom, right, color):
+        """Draw what one row shows, between `top` and `bottom` and left of `right`.
+
+        The default is the item's text. Subclasses override this to draw richer
+        rows (icons, several columns); `color` is the text color for the row's state.
+        """
+        self.create_text(
+            self.EDGE + 8,
+            (top + bottom) / 2,
+            text=str(self._items[row]),
+            font=self.font,
+            fill=color,
+            anchor="w",
+            tags=_CANVAS_CHROME_TAG,
+        )
+
     def redraw(self, width, height):
         """Draw the box, the visible rows (with selection/hover highlights), and the scroll bar.
 
@@ -532,15 +549,7 @@ class Listbox(CanvasWidget):
                 color = self.part("selected_text_color", "accent_text")
             else:
                 color = self.current_text_color()
-            self.create_text(
-                self.EDGE + 8,
-                top + row_height / 2,
-                text=str(self._items[row]),
-                font=self.font,
-                fill=color,
-                anchor="w",
-                tags=_CANVAS_CHROME_TAG,
-            )
+            self.draw_row_content(row, top, top + row_height, right, color)
         if self._bar_visible():
             bar_left = self._bar_left()
             self.draw_box(

@@ -1085,12 +1085,12 @@ class Menu:
         return snapshot
 
     def post(self, x, y, owner=None, flip_y=None, on_close=None):
-        # Showing a menu closes one that is already open.
         """Show the menu as a popup with its top-left at screen position (x, y).
 
         owner: the widget it belongs to (its window's theme is used). flip_y: where to
         flip above if there is no room below. on_close: called when it closes.
         """
+        # Showing a menu closes one that is already open.
         self.unpost()
         owner = owner or self.master or tk._default_root
         popup = _CanvasPopup(

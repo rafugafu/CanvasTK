@@ -511,7 +511,6 @@ class _WidgetPlumbing:
         return {**CANVAS_WIDGET_THEME, **window_theme(self), **self._theme_overrides}
 
     def _init_plumbing(self, theme):
-        # An 'accent' in the theme also derives accent_hover, accent_text...
         """Set up theme state, the pending-call set, and the watched-variable slot.
 
         Must be called after the Tk widget exists (it needs winfo for the window

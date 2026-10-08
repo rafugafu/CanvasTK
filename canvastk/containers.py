@@ -1261,11 +1261,11 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
 
 
 class _Sash(CanvasWidget):
-    # Sash thickness in px.
     """The draggable divider between two panes of a Panedwindow/GridPanedwindow: a line
     with a three-dot grip.
     """
 
+    # Sash thickness in px.
     THICKNESS = 6
     # How close (px) to a point where sashes meet the pointer must be to grab
     # the meeting point (a "junction") instead of just this one sash.

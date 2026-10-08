@@ -389,6 +389,54 @@ def build_demo():
     # The bottom pane can be split horizontally too, in the same widget.
     grid.split(grid_bottom, make_grid_pane(), "horizontal")
 
+    # The canvastk file dialogs and message boxes: the same functions and options as
+    # tkinter.filedialog and tkinter.messagebox.
+    # --- Dialogs tab
+    dialogs_tab = Frame(notebook)
+    notebook.add(dialogs_tab, text="Dialogs")
+    dialog_result = tk.StringVar(dialogs_tab, value="Pick a dialog to open.")
+    Label(dialogs_tab, "Same API as tkinter.filedialog and tkinter.messagebox:").pack(
+        anchor="w", padx=14, pady=(14, 6)
+    )
+    text_types = [("Text files", "*.txt"), ("Python files", "*.py *.pyw"), ("All files", "*")]
+    for caption, ask in (
+        ("askopenfilename", lambda: filedialog.askopenfilename(parent=root, filetypes=text_types)),
+        ("askopenfilenames", lambda: filedialog.askopenfilenames(parent=root)),
+        (
+            "asksaveasfilename",
+            lambda: filedialog.asksaveasfilename(
+                parent=root, defaultextension=".txt", filetypes=text_types
+            ),
+        ),
+        ("askdirectory", lambda: filedialog.askdirectory(parent=root)),
+        ("showinfo", lambda: messagebox.showinfo("Saved", "The file was saved.", parent=root)),
+        (
+            "showwarning",
+            lambda: messagebox.showwarning(
+                "Careful", "This cannot be undone.", detail="Make a copy first.", parent=root
+            ),
+        ),
+        ("showerror", lambda: messagebox.showerror("Error", "Could not open the file.", parent=root)),
+        ("askyesno", lambda: messagebox.askyesno("Quit", "Quit without saving?", parent=root)),
+        (
+            "askyesnocancel",
+            lambda: messagebox.askyesnocancel("Save", "Save the changes?", parent=root),
+        ),
+        (
+            "askretrycancel",
+            lambda: messagebox.askretrycancel("Network", "The server is not answering.", parent=root),
+        ),
+    ):
+        Button(
+            dialogs_tab, caption, command=lambda ask=ask: dialog_result.set(repr(ask()))
+        ).pack(anchor="w", padx=14, pady=4)
+    Label(dialogs_tab, "The last result (an empty value means cancelled):").pack(
+        anchor="w", padx=14, pady=(14, 4)
+    )
+    Label(dialogs_tab, textvariable=dialog_result, wraplength=600, justify="left").pack(
+        anchor="w", padx=14
+    )
+
     # ScrolledFrame in its three orientations.
     # --- Scrolled frames: vertical, horizontal, and both
     scrolled = ScrolledFrame(notebook)

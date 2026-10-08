@@ -224,12 +224,12 @@ class _FramedWidget(_WidgetPlumbing, tk.Frame):
     config = configure
 
     def cget(self, key):
-        # Native color names (bg, fg...) report the inner widget's real,
-        # current color (children such as the Textbox's scroll bar read the
-        # background through this); only our own color parts report overrides.
         """cget(): color parts and our own options come from us; native options from the
         inner widget.
         """
+        # Native color names (bg, fg...) report the inner widget's real,
+        # current color (children such as the Textbox's scroll bar read the
+        # background through this); only our own color parts report overrides.
         if key in self._COLOR_PARTS:
             return self._theme_overrides.get(key)
         if key in self._OWN_OPTIONS:
@@ -697,13 +697,13 @@ class Spinbox(Entry):
         width=8,
         **kwargs,
     ):
-        # A validatecommand the caller gave replaces the built-in typing rule.
         """Create the spin box.
 
         from_ / to / increment: the numeric range and step. values: step through this
         list of strings instead. wrap: go around at the ends. command(): called after
         every step. width: characters. Everything else is as Entry.
         """
+        # A validatecommand the caller gave replaces the built-in typing rule.
         own_validation = "validatecommand" in kwargs
         Entry.__init__(
             self, master, width=width, right_padding=self.ARROW_WIDTH, **kwargs

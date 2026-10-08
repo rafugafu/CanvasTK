@@ -69,7 +69,12 @@ from .windows import (
     Window,
 )
 
+# The file dialogs and message boxes, used as canvastk.filedialog.askopenfilename(...) like tkinter's.
+from . import filedialog, messagebox
+
 __all__ = [
+    "filedialog",
+    "messagebox",
     "GridPanedwindow",
     "hover_variant",
     "set_theme",
