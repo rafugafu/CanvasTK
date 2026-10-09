@@ -9,6 +9,7 @@ import tkinter as tk
 from ._core import (
     _CANVAS_THEMED_WIDGETS,
     expand_theme,
+    starting_theme,
 )
 from .containers import (
     _ThemedBackground,
@@ -30,7 +31,7 @@ class _ThemedWindow(_ThemedBackground):
         self._explicit_background = background
         # The window's own theme: widgets inside look it up through window_theme(),
         # between the global theme and their own overrides.
-        self._theme_overrides = dict(expand_theme(theme)) if theme else {}
+        self._theme_overrides = starting_theme(theme)
         self.background_role = None if background else "window"
         self.child_background_role = self.background_role
         self.configure(bg=background or self.themed_color(self, "window"))

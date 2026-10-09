@@ -14,6 +14,7 @@ from ._core import (
     CANVAS_WIDGET_THEME,
     CanvasWidget,
     expand_theme,
+    starting_theme,
     window_theme,
     _CANVAS_CHROME_TAG,
     _WHEEL_SEQUENCES,
@@ -889,7 +890,7 @@ class Menu:
         self.master = master
         self.entries = []
         self.font = font
-        self._theme_overrides = dict(expand_theme(theme or {}))
+        self._theme_overrides = starting_theme(theme)
         self.configure(**options)
         self._popup = None
         self._observers = []
@@ -1319,7 +1320,7 @@ class Tooltip:
         self.text = text
         self.delay = delay
         self.font = font
-        self._theme_overrides = dict(expand_theme(theme or {}))
+        self._theme_overrides = starting_theme(theme)
         for key, value in (
             ("tooltip", fill_color),
             ("border", border_color),

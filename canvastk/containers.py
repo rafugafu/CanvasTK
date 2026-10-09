@@ -11,6 +11,7 @@ from ._core import (
     pop_color_parts,
     cross_image,
     expand_theme,
+    starting_theme,
     window_theme,
     CANVAS_WIDGET_THEME,
     CanvasWidget,
@@ -56,7 +57,7 @@ class _ThemedBackground:
         """Work out this container's background role/color from its master (or an
         explicit bg), and keep its own theme overrides.
         """
-        self._theme_overrides = dict(expand_theme(theme or {}))
+        self._theme_overrides = starting_theme(theme)
         if background is None:
             provider = getattr(master, "child_background_color", None)
             background = provider() if provider else None

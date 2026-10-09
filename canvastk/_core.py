@@ -155,6 +155,13 @@ def expand_theme(theme, base=None):
     return expanded
 
 
+def starting_theme(theme, base=None):
+    """expand_theme(theme, base) without the keys whose value is None: for a theme
+    given when a widget or window is created, None means "use the default".
+    """
+    return {k: v for k, v in expand_theme(theme or {}, base).items() if v is not None}
+
+
 def _rebuild_canvas_widget_theme():
     """Recompute the global theme dict CANVAS_WIDGET_THEME in place.
 
@@ -517,8 +524,8 @@ class _WidgetPlumbing:
         theme). `theme` is this widget's own theme-key / color-part overrides.
         """
         # An 'accent' in the theme also derives accent_hover, accent_text...
-        self._theme_overrides = dict(
-            expand_theme(theme or {}, {**CANVAS_WIDGET_THEME, **window_theme(self)})
+        self._theme_overrides = starting_theme(
+            theme, {**CANVAS_WIDGET_THEME, **window_theme(self)}
         )
         self.colors = self._merged_colors()
         _CANVAS_THEMED_WIDGETS.add(self)
