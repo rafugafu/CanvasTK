@@ -20,6 +20,7 @@ from ._core import (
     _WHEEL_SEQUENCES,
     _inside,
     make_font,
+    measure_widths,
     resolve_color,
     rounded_box_image,
     wheel_direction,
@@ -140,15 +141,18 @@ class _CanvasPopup(tk.Toplevel):
         self._text_x = 32 if has_marks else 14
         self._right_padding = 28 if has_arrow else 14
         label_width = max(
-            (
-                self.font.measure(e["label"])
-                for e in entries
-                if e["kind"] != "separator"
+            measure_widths(
+                self,
+                self.font,
+                [e["label"] for e in entries if e["kind"] != "separator"],
             ),
             default=0,
         )
         accelerator_width = max(
-            (self.font.measure(e.get("accelerator", "")) for e in entries), default=0
+            measure_widths(
+                self, self.font, [e["accelerator"] for e in entries if e.get("accelerator")]
+            ),
+            default=0,
         )
         # Fit as many entries as the maximum height allows; the others scroll.
         if self._max_height is not None:
@@ -794,7 +798,7 @@ class OptionMenu(_DropdownOwner, CanvasWidget):
             str(self.variable.get()),
             self.placeholder,
         ]
-        widest = max(self.font.measure(text) for text in texts)
+        widest = max(measure_widths(self, self.font, texts))
         return widest + 24 + self.ARROW_WIDTH, self.font.metrics("linespace") + 14
 
     def _on_release(self, event):

@@ -860,8 +860,8 @@ class Textbox(_FramedWidget):
         font=None,
         wrap="none",
         state="normal",
-        width=40,
-        height=10,
+        width=80,
+        height=24,
         yscrollcommand=None,
         theme=None,
         radius=8,
@@ -873,7 +873,8 @@ class Textbox(_FramedWidget):
         """Create the text box.
 
         scrolled: add a built-in canvas scroll bar that hides itself when not needed.
-        wrap / state / width (characters) / height (lines) / font: as tk.Text.
+        wrap / state / width (characters) / height (lines) / font: as tk.Text (80 x 24
+        characters by default, like tk.Text).
         yscrollcommand: for a scroll bar of your own (works together with scrolled).
         radius, border_width, focus_border_width: border shape. placeholder: hint
         while empty.

@@ -4,6 +4,8 @@ It mirrors tkinter's Listbox API (insert, delete, curselection, selection_*, see
 yview...) so it can replace one, and can draw its own scroll bar (scrolled=True).
 """
 
+import tkinter as tk
+
 from ._core import (
     CanvasWidget,
     _CANVAS_CHROME_TAG,
@@ -153,8 +155,13 @@ class Listbox(CanvasWidget):
     # ---- index helpers --------------------------------------------------------
     def _index(self, index, allow_end=False):
         """Turn a tkinter index ('end', 'active', 'anchor', or a number) into a row
-        number.
+        number. A one-item tuple or list, such as curselection() returns for a single
+        selected row, counts as that item.
         """
+        if isinstance(index, (tuple, list)):
+            if len(index) != 1:
+                raise tk.TclError(f'bad listbox index "{index}"')
+            index = index[0]
         if index == "end":
             return len(self._items) if allow_end else len(self._items) - 1
         if index == "active":
@@ -212,6 +219,14 @@ class Listbox(CanvasWidget):
     def curselection(self):
         """The selected row numbers as a sorted tuple."""
         return tuple(sorted(self._selected))
+
+    def selection_get(self, **options):
+        """The text of the selected rows, one per line (tkinter's Listbox gives the
+        same when its selection is exported). Raises TclError if nothing is selected.
+        """
+        if not self._selected:
+            raise tk.TclError('PRIMARY selection doesn\'t exist or form "STRING" not defined')
+        return "\n".join(str(self._items[row]) for row in sorted(self._selected))
 
     def selection_set(self, first, last=None):
         """Select the rows first..last; in browse/single mode only the last one stays

@@ -517,6 +517,9 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         tk.Frame.bind(self, "<Left>", lambda _: self._select_neighbor(-1), add="+")
         tk.Frame.bind(self, "<Right>", lambda _: self._select_neighbor(1), add="+")
         tk.Frame.bind(self, "<Configure>", lambda _: self._place_selected(), add="+")
+        # Measure the pages again once the notebook is shown (they may have been filled
+        # after the first measurement).
+        tk.Frame.bind(self, "<Map>", lambda _: self._tab_changed(), add="+")
 
     def schedule_redraw(self):
         """Redraws of the notebook are redraws of its chrome canvas."""
@@ -704,6 +707,9 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         self._size_update_id = None
         if self._fixed_size or not self._tab_records:
             return
+        # Let Tk lay out the pages' own widgets first: this runs as soon as the program
+        # is idle, which can be before the pages ask for their real size.
+        self.update_idletasks()
         pad = self.padding
         sizes = [requested_size_of(r["child"]) for r in self._tab_records]
         width = max(w for w, _ in sizes) + 2 * pad

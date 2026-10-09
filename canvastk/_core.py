@@ -460,6 +460,33 @@ def make_font(font=None, size=11, weight="normal"):
     return shared
 
 
+def measure_widths(parent, font, texts):
+    """The pixel widths of many strings in a font, as tkfont.Font.measure() gives them.
+
+    Every Font.measure() call can take milliseconds (the font is looked up again each
+    time), which makes measuring hundreds of strings, such as a font list, freeze the
+    program for seconds. Here one hidden canvas text item is reused for all strings,
+    which is thousands of times faster.
+    """
+    texts = list(texts)
+    if len(texts) < 4:
+        return [font.measure(text) for text in texts]
+    canvas = tk.Canvas(parent)
+    try:
+        item = canvas.create_text(0, 0, text="0", font=font, anchor="nw")
+        left, _, right, _ = canvas.bbox(item)
+        # A canvas text box is a little wider than the text; remove that difference.
+        extra = (right - left) - font.measure("0")
+        widths = []
+        for text in texts:
+            canvas.itemconfigure(item, text=text)
+            box = canvas.bbox(item)
+            widths.append(max(0, box[2] - box[0] - extra) if text and box else 0)
+        return widths
+    finally:
+        canvas.destroy()
+
+
 def measure_content(text, image, font, wraplength=0, gap=6):
     """(width, height) of text with an optional image to its left."""
     lines = text.split("\n") if text else []
