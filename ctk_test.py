@@ -366,6 +366,14 @@ def build_demo():
             theme={"window": "#fff4e6", "surface": "#fffaf3", "accent": "#e8590c"},
         ),
     ).pack(anchor="w", padx=14, pady=4)
+    Button(
+        windows_tab,
+        "Toplevel in the other appearance mode",
+        command=lambda: open_toplevel(
+            "Other mode",
+            appearance_mode="light" if get_appearance_mode() == "dark" else "dark",
+        ),
+    ).pack(anchor="w", padx=14, pady=4)
     Label(windows_tab, "And the main window's theme can change while running:").pack(
         anchor="w", padx=14, pady=(14, 4)
     )

@@ -162,14 +162,13 @@ def starting_theme(theme, base=None):
     return {k: v for k, v in expand_theme(theme or {}, base).items() if v is not None}
 
 
-def _rebuild_canvas_widget_theme():
-    """Recompute the global theme dict CANVAS_WIDGET_THEME in place.
+def _theme_for_mode(mode):
+    """The whole theme for an appearance mode ('light' or 'dark').
 
-    Layers, later ones winning: the light or dark palette for the current appearance
-    mode, the default (blue) accent and the keys derived from it, then the changes
-    made with set_theme(). The dict is updated in place so every importer sees it.
+    Layers, later ones winning: the light or dark palette, the default (blue) accent
+    and the keys derived from it, then the changes made with set_theme().
     """
-    dark = _CANVAS_APPEARANCE_MODE == "dark"
+    dark = mode == "dark"
     theme = dict(CANVAS_DARK_PALETTE if dark else CANVAS_LIGHT_PALETTE)
     theme.update(
         _derive_accent_keys(
@@ -180,6 +179,14 @@ def _rebuild_canvas_widget_theme():
         )
     )
     theme.update(expand_theme(_CANVAS_USER_THEME, theme))
+    return theme
+
+
+def _rebuild_canvas_widget_theme():
+    """Recompute the global theme dict CANVAS_WIDGET_THEME in place, for the current
+    appearance mode. The dict is updated in place so every importer sees it.
+    """
+    theme = _theme_for_mode(_CANVAS_APPEARANCE_MODE)
     CANVAS_WIDGET_THEME.clear()
     CANVAS_WIDGET_THEME.update(theme)
 
@@ -207,6 +214,17 @@ def set_appearance_mode(mode):
 def get_appearance_mode():
     """The current appearance mode, 'light' or 'dark'."""
     return _CANVAS_APPEARANCE_MODE
+
+
+def check_appearance_mode(mode):
+    """`mode` as 'light', 'dark', or None (follow the surroundings); ValueError for
+    anything else.
+    """
+    if mode is None:
+        return None
+    if not isinstance(mode, str) or mode.lower() not in ("light", "dark"):
+        raise ValueError("mode must be 'light', 'dark', or None")
+    return mode.lower()
 
 
 def set_theme(theme):
@@ -247,6 +265,32 @@ def window_theme(widget):
         return widget.winfo_toplevel()._theme_overrides
     except (AttributeError, tk.TclError):
         return {}
+
+
+def window_appearance_mode(widget):
+    """The appearance mode of the window that contains widget ('light' or 'dark'), or
+    None if that window follows the global one (or is not a canvastk Window/Toplevel).
+    """
+    if widget is None:
+        return None
+    try:
+        return widget.winfo_toplevel()._appearance_mode
+    except (AttributeError, tk.TclError):
+        return None
+
+
+def layered_theme(widget, own_mode, own_overrides):
+    """The effective theme of something in `widget`'s window: the whole theme of the
+    appearance mode that applies (its own `own_mode`, else the window's, else the
+    global one), then the window's theme, then its own `own_overrides`.
+    """
+    mode = own_mode or window_appearance_mode(widget)
+    base = (
+        CANVAS_WIDGET_THEME
+        if mode is None or mode == _CANVAS_APPEARANCE_MODE
+        else _theme_for_mode(mode)
+    )
+    return {**base, **window_theme(widget), **own_overrides}
 
 
 _rebuild_canvas_widget_theme()
@@ -539,10 +583,28 @@ class _WidgetPlumbing:
     the theme."""
 
     _COLOR_PARTS = ()
+    _appearance_mode = None  # 'light' / 'dark' for this widget alone, else follows
 
     def _merged_colors(self):
-        """Global theme, then the window's theme, then this widget's own."""
-        return {**CANVAS_WIDGET_THEME, **window_theme(self), **self._theme_overrides}
+        """The theme of the appearance mode that applies, then the window's theme, then
+        this widget's own.
+        """
+        return layered_theme(self, self._appearance_mode, self._theme_overrides)
+
+    def set_appearance_mode(self, mode):
+        """'light' or 'dark' for this widget alone; None follows its window (or the
+        global mode). Theme keys set on the window or the widget still win.
+        """
+        self._appearance_mode = check_appearance_mode(mode)
+        self.refresh_theme()
+
+    def get_appearance_mode(self):
+        """The appearance mode this widget uses, 'light' or 'dark'."""
+        return (
+            self._appearance_mode
+            or window_appearance_mode(self)
+            or _CANVAS_APPEARANCE_MODE
+        )
 
     def _init_plumbing(self, theme):
         """Set up theme state, the pending-call set, and the watched-variable slot.
@@ -552,7 +614,7 @@ class _WidgetPlumbing:
         """
         # An 'accent' in the theme also derives accent_hover, accent_text...
         self._theme_overrides = starting_theme(
-            theme, {**CANVAS_WIDGET_THEME, **window_theme(self)}
+            theme, layered_theme(self, self._appearance_mode, {})
         )
         self.colors = self._merged_colors()
         _CANVAS_THEMED_WIDGETS.add(self)
@@ -705,6 +767,9 @@ class CanvasWidget(_WidgetPlumbing, tk.Canvas):
         self._fixed_width = "width" in kwargs
         self._fixed_height = "height" in kwargs
         theme = {**(theme or {}), **pop_color_parts(self._COLOR_PARTS, kwargs)}
+        self._appearance_mode = check_appearance_mode(
+            kwargs.pop("appearance_mode", None)
+        )
         background = kwargs.pop("bg", kwargs.pop("background", None))
         self.fg = kwargs.pop("fg", kwargs.pop("foreground", None))
         self.state = kwargs.pop("state", "normal")

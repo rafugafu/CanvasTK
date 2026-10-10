@@ -15,7 +15,7 @@ theme of the window it belongs to, and is shown above that window.
 
 import tkinter as tk
 
-from ._core import CanvasWidget, window_theme
+from ._core import CanvasWidget, window_appearance_mode, window_theme
 from .buttons import Button, Label
 from .containers import Frame
 from .windows import Toplevel, Window
@@ -199,7 +199,11 @@ def _show(title, message, icon, type, **options):
         temporary_root = owner = Window()
         owner.withdraw()
     try:
-        window = Toplevel(owner, theme=dict(window_theme(owner)))
+        window = Toplevel(
+            owner,
+            theme=dict(window_theme(owner)),
+            appearance_mode=window_appearance_mode(owner),
+        )
         window.title(title or "")
         window.resizable(False, False)
         answer = [close_answer]

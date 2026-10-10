@@ -9,11 +9,13 @@ import tkinter as tk
 
 from ._core import (
     pop_color_parts,
+    check_appearance_mode,
     cross_image,
     expand_theme,
+    get_appearance_mode,
+    layered_theme,
     starting_theme,
-    window_theme,
-    CANVAS_WIDGET_THEME,
+    window_appearance_mode,
     CanvasWidget,
     _CANVAS_CHROME_TAG,
     _CANVAS_THEMED_WIDGETS,
@@ -49,6 +51,8 @@ class _ThemedBackground:
     comes from its master (a Notebook page is 'surface', a Window is
     'window'); containers inside foreign widgets keep a fixed measured color."""
 
+    _appearance_mode = None  # 'light' / 'dark' for this container alone, else follows
+
     def child_background_color(self):
         """A fixed color this container gives its children (or None)."""
         return self._explicit_background
@@ -70,11 +74,7 @@ class _ThemedBackground:
     def themed_color(self, widget, key):
         """Theme color for key: global theme, then the window's, then this
         container's own overrides."""
-        colors = {
-            **CANVAS_WIDGET_THEME,
-            **window_theme(widget),
-            **self._theme_overrides,
-        }
+        colors = layered_theme(widget, self._appearance_mode, self._theme_overrides)
         return resolve_color(widget, colors[key])
 
     def initial_background(self, master, background):
@@ -105,11 +105,26 @@ class _ThemedBackground:
 
     def get_theme(self):
         """This container's effective theme (theme key -> color)."""
-        return {
-            **CANVAS_WIDGET_THEME,
-            **window_theme(self),
-            **self._theme_overrides,
-        }
+        return layered_theme(self, self._appearance_mode, self._theme_overrides)
+
+    def set_appearance_mode(self, mode):
+        """'light' or 'dark' for this container's own background; None follows its
+        window (or the global mode).
+        """
+        self._appearance_mode = check_appearance_mode(mode)
+        self._appearance_changed()
+
+    def get_appearance_mode(self):
+        """The appearance mode this container uses, 'light' or 'dark'."""
+        return (
+            self._appearance_mode
+            or window_appearance_mode(self)
+            or get_appearance_mode()
+        )
+
+    def _appearance_changed(self):
+        """The appearance mode of this container changed: recolor it."""
+        self.refresh_theme()
 
     def reset_theme(self):
         """Remove every theme change made on this container."""

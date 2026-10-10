@@ -20,7 +20,13 @@ import tkinter as tk
 
 from PIL import Image, ImageDraw, ImageOps, ImageTk
 
-from ._core import CanvasWidget, resolve_color, window_theme, _CANVAS_CHROME_TAG
+from ._core import (
+    CanvasWidget,
+    resolve_color,
+    window_appearance_mode,
+    window_theme,
+    _CANVAS_CHROME_TAG,
+)
 from .buttons import Button, Label
 from .containers import Frame
 from .entries import Entry, Spinbox
@@ -427,7 +433,11 @@ class _ColorPickerDialog:
         """Create the window and every widget."""
         starting = self._starting_rgb(owner)
         self.hue, self.saturation, self.value = rgb_to_hsv(starting)
-        self.window = window = Toplevel(owner, theme=dict(window_theme(owner)))
+        self.window = window = Toplevel(
+            owner,
+            theme=dict(window_theme(owner)),
+            appearance_mode=window_appearance_mode(owner),
+        )
         window.title(self.title)
         window.resizable(False, False)
         window.protocol("WM_DELETE_WINDOW", self.cancel)

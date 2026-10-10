@@ -11,11 +11,10 @@ import tkinter as tk
 import tkinter.font as tkfont
 
 from ._core import (
-    CANVAS_WIDGET_THEME,
     CanvasWidget,
     expand_theme,
+    layered_theme,
     starting_theme,
-    window_theme,
     _CANVAS_CHROME_TAG,
     _WHEEL_SEQUENCES,
     _inside,
@@ -904,11 +903,7 @@ class Menu:
     def colors_for(self, owner=None):
         """The colors this menu's popups use when shown from owner: the
         global theme, the owner window's theme, then this menu's own."""
-        colors = {
-            **CANVAS_WIDGET_THEME,
-            **window_theme(owner),
-            **self._theme_overrides,
-        }
+        colors = layered_theme(owner, None, self._theme_overrides)
         for name, key in _POPUP_COLOR_THEME_KEYS.items():
             if self._color_options.get(name):
                 colors[key] = self._color_options[name]
@@ -1365,11 +1360,7 @@ class Tooltip:
             window.attributes("-topmost", True)
         except tk.TclError:
             pass
-        colors = {
-            **CANVAS_WIDGET_THEME,
-            **window_theme(self.widget),
-            **self._theme_overrides,
-        }
+        colors = layered_theme(self.widget, None, self._theme_overrides)
         fill = resolve_color(window, colors["tooltip"])
         border = resolve_color(window, colors["border"])
         canvas = tk.Canvas(

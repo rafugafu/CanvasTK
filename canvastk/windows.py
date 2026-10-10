@@ -8,6 +8,7 @@ import tkinter as tk
 
 from ._core import (
     _CANVAS_THEMED_WIDGETS,
+    check_appearance_mode,
     expand_theme,
     starting_theme,
 )
@@ -25,9 +26,12 @@ class _ThemedWindow(_ThemedBackground):
     _ThemedBackground).
     """
 
-    def _init_window(self, background, theme):
+    def _init_window(self, background, theme, appearance_mode=None):
         """background: a fixed color (bg=), or None to follow the theme.
-        theme: theme-key overrides for this window and every widget in it."""
+        theme: theme-key overrides for this window and every widget in it.
+        appearance_mode: 'light' or 'dark' for this window alone (None follows the
+        global mode)."""
+        self._appearance_mode = check_appearance_mode(appearance_mode)
         self._explicit_background = background
         # The window's own theme: widgets inside look it up through window_theme(),
         # between the global theme and their own overrides.
@@ -40,6 +44,11 @@ class _ThemedWindow(_ThemedBackground):
     def refresh_theme(self):
         """The theme changed: re-apply the window's background."""
         self.apply_background()
+
+    def _appearance_changed(self):
+        """The window's appearance mode changed: recolor it and everything in it."""
+        self.refresh_theme()
+        self._refresh_window_widgets()
 
     def _refresh_window_widgets(self):
         """Make every themed widget that lives in this window re-read the theme (after
@@ -82,8 +91,9 @@ class Window(_ThemedWindow, tk.Tk):
         theme= gives the window its own theme keys.
         """
         background = kwargs.pop("bg", kwargs.pop("background", None))
+        appearance_mode = kwargs.pop("appearance_mode", None)
         tk.Tk.__init__(self, *arguments, **kwargs)
-        self._init_window(background, theme)
+        self._init_window(background, theme, appearance_mode)
 
 
 class Toplevel(_ThemedWindow, tk.Toplevel):
@@ -102,8 +112,9 @@ class Toplevel(_ThemedWindow, tk.Toplevel):
         transient=False makes it fully independent.
         """
         background = kwargs.pop("bg", kwargs.pop("background", None))
+        appearance_mode = kwargs.pop("appearance_mode", None)
         tk.Toplevel.__init__(self, *arguments, **kwargs)
-        self._init_window(background, theme)
+        self._init_window(background, theme, appearance_mode)
         # Make it a real subwindow for the window manager: transient (kept above,
         # minimized with the master) and in the master's window group.
         if transient and self.master is not None:
