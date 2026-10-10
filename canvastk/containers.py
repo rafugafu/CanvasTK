@@ -180,15 +180,22 @@ class _ScrolledContent:
         }
         return {**(theme or {}), **scrollbar_theme}
 
+    @staticmethod
+    def _check_orient(orient):
+        """Raise ValueError unless `orient` is a direction a frame can scroll in."""
+        if orient not in ("vertical", "horizontal", "both"):
+            raise ValueError("orient must be 'vertical', 'horizontal' or 'both'")
+
     def _build_viewport(
-        self, area, orient, autohide, scrollbar_theme, background, max_height=None
+        self, area, orient, autohide, scrollbar_theme, background, max_size=None
     ):
         """Create the viewport and the scroll bars in the container `area`. With
-        `max_height`, the viewport asks for the height of the contents up to that many
-        px (more scrolls); without it, it keeps the canvas's own size.
+        `max_size` (width, height), the viewport asks for the size of the contents up
+        to that many px along the axes that scroll (more scrolls); without it, it
+        keeps the canvas's own size.
         """
         self._scroll_area = area
-        self._max_viewport_height = max_height
+        self._max_viewport_size = max_size
         self._scrolls_vertically = orient in ("vertical", "both")
         self._scrolls_horizontally = orient in ("horizontal", "both")
         self.viewport = tk.Canvas(area, bd=0, highlightthickness=0, bg=background)
@@ -253,10 +260,19 @@ class _ScrolledContent:
             height = max(self.winfo_reqheight(), view_height)
         self.viewport.itemconfigure(self._window, width=width, height=height)
         self.viewport.configure(scrollregion=(0, 0, width, height))
-        if self._max_viewport_height is not None:
+        if self._max_viewport_size is not None:
+            max_width, max_height = self._max_viewport_size
             self.viewport.configure(
-                width=self.winfo_reqwidth(),
-                height=min(self.winfo_reqheight(), self._max_viewport_height),
+                width=(
+                    min(self.winfo_reqwidth(), max_width)
+                    if self._scrolls_horizontally
+                    else self.winfo_reqwidth()
+                ),
+                height=(
+                    min(self.winfo_reqheight(), max_height)
+                    if self._scrolls_vertically
+                    else self.winfo_reqheight()
+                ),
             )
 
     def _on_wheel(self, event):
@@ -300,6 +316,33 @@ class _ScrolledContent:
                 pass
 
 
+class _FrameOptions:
+    """configure() / cget() for a frame-like container that has options of its own
+    (listed in _FRAME_OPTIONS, each an attribute or property); the rest are tk.Frame's.
+    """
+
+    _FRAME_OPTIONS = ()
+
+    def configure(self, cnf=None, **kw):
+        """tkinter configure(): sets the container's own options, passes the rest on."""
+        if isinstance(cnf, dict):
+            kw, cnf = {**cnf, **kw}, None
+        own = {name: kw.pop(name) for name in list(kw) if name in self._FRAME_OPTIONS}
+        for name, value in own.items():
+            setattr(self, name, value)
+        if own and not kw and cnf is None:
+            return None
+        return tk.Frame.configure(self, cnf, **kw)
+
+    config = configure
+
+    def cget(self, key):
+        """tkinter cget(): the container's own options come from the attributes."""
+        if key in self._FRAME_OPTIONS:
+            return getattr(self, key)
+        return tk.Frame.cget(self, key)
+
+
 class ScrolledFrame(_ScrolledContent, _ThemedBackground, tk.Frame):
     """A scrolling frame: add children to the ScrolledFrame itself; pack/grid/
     place act on the whole scrolling container.
@@ -315,8 +358,7 @@ class ScrolledFrame(_ScrolledContent, _ThemedBackground, tk.Frame):
         theme / bg / scrollbar_*_color: styling. The returned object is the *content*
         frame; its geometry methods are redirected to the outer container.
         """
-        if orient not in ("vertical", "horizontal", "both"):
-            raise ValueError("orient must be 'vertical', 'horizontal' or 'both'")
+        self._check_orient(orient)
         self.orient = orient
         scrollbar_theme = self._pop_scrollbar_theme(kwargs, theme)
         background = kwargs.pop("bg", kwargs.pop("background", None))
@@ -378,6 +420,7 @@ class _FoldableHeader(CanvasWidget):
         "text_color",
         "arrow_color",
         "focus_color",
+        "disabled_text_color",
     )
     _CUSTOM_OPTIONS = CanvasWidget._CUSTOM_OPTIONS + ("text",)
     DEFAULT_FONT_WEIGHT = "bold"
@@ -387,15 +430,16 @@ class _FoldableHeader(CanvasWidget):
         """`foldable` is the Foldable the bar belongs to (it says whether it is open and
         is told when the bar is clicked).
         """
-        super().__init__(master, theme=theme, takefocus=True, **kwargs)
+        takefocus = kwargs.get("state", "normal") != "disabled"
+        super().__init__(master, theme=theme, takefocus=takefocus, **kwargs)
         self.foldable = foldable
         self.text = text
         self._pressed = False
         self.track_interaction()
         self.bind("<ButtonPress-1>", self._on_press, add="+")
         self.bind("<ButtonRelease-1>", self._on_release, add="+")
-        self.bind("<space>", lambda _: foldable.toggle(), add="+")
-        self.bind("<Return>", lambda _: foldable.toggle(), add="+")
+        self.bind("<space>", lambda _: self._toggle_foldable(), add="+")
+        self.bind("<Return>", lambda _: self._toggle_foldable(), add="+")
         self.refit()
         self.schedule_redraw()
 
@@ -404,8 +448,15 @@ class _FoldableHeader(CanvasWidget):
         width, height = measure_content(self.text, None, self.font)
         return width + 44, height + 2 * self.VERTICAL_PADDING
 
+    def _toggle_foldable(self):
+        """Fold or unfold, unless the bar is disabled."""
+        if not self.is_disabled():
+            self.foldable.toggle()
+
     def _on_press(self, _):
         """Mouse down: a release inside the bar will fold or unfold."""
+        if self.is_disabled():
+            return
         self._pressed = True
         self.focus_set()
 
@@ -417,30 +468,47 @@ class _FoldableHeader(CanvasWidget):
             and 0 <= event.x < self.winfo_width()
             and 0 <= event.y < self.winfo_height()
         ):
-            self.foldable.toggle()
+            self._toggle_foldable()
 
     def redraw(self, width, height):
-        """Draw the bar, the arrow (down while open, right while folded), and the title."""
-        fill = self.part("hover_color", "neutral_hover") if self._hovered else None
+        """Draw the bar, the arrow (down while open, right while folded), and the title
+        (in the disabled color while disabled).
+        """
+        disabled = self.is_disabled()
+        fill = (
+            self.part("hover_color", "neutral_hover")
+            if self._hovered and not disabled
+            else None
+        )
         fill = fill or self.part("fill_color", "neutral")
-        outline = self.part("focus_color", "focus_ring") if self._focused else None
+        outline = (
+            self.part("focus_color", "focus_ring")
+            if self._focused and not disabled
+            else None
+        )
+        disabled_color = self.part("disabled_text_color", "text_disabled")
         self.draw_box(0, 0, width, height, fill, outline, 2 if outline else 0, 8)
         direction = "down" if self.foldable.is_expanded() else "right"
         self.draw_chevron(
-            19, height / 2, direction, self.part("arrow_color", "text_muted"), 4, 2
+            19,
+            height / 2,
+            direction,
+            disabled_color if disabled else self.part("arrow_color", "text_muted"),
+            4,
+            2,
         )
         self.create_text(
             34,
             height / 2,
             text=self.text,
             font=self.font,
-            fill=self.part("text_color", "text"),
+            fill=disabled_color if disabled else self.part("text_color", "text"),
             anchor="w",
             tags=_CANVAS_CHROME_TAG,
         )
 
 
-class Foldable(_ScrolledContent, _ThemedBackground, tk.Frame):
+class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
     """A frame that can be folded away: a header bar with an arrow and a title, and the
     contents under it.
 
@@ -452,11 +520,15 @@ class Foldable(_ScrolledContent, _ThemedBackground, tk.Frame):
     for the space the Foldable itself takes. Click the header, or press Space or Return
     on it, to fold or unfold; expand(), collapse(), and toggle() do it from code.
 
-    With scrolled=True the contents scroll when they are taller than max_height; the
-    children are still added to the Foldable itself.
+    With scrolled=True the contents scroll (in the direction orient: "vertical",
+    "horizontal", or "both") when they are bigger than max_height / max_width; the
+    children are still added to the Foldable itself. state="disabled" greys out the
+    header and stops clicks and keys from folding it (expand() and collapse() from code
+    still work); the children are not affected.
     """
 
     _HEADER_COLOR_PARTS = _FoldableHeader._COLOR_PARTS
+    _FRAME_OPTIONS = ("text", "state")
 
     def __init__(
         self,
@@ -466,7 +538,10 @@ class Foldable(_ScrolledContent, _ThemedBackground, tk.Frame):
         command=None,
         padding=8,
         scrolled=False,
+        orient="vertical",
         max_height=300,
+        max_width=300,
+        state="normal",
         theme=None,
         **kwargs,
     ):
@@ -475,10 +550,12 @@ class Foldable(_ScrolledContent, _ThemedBackground, tk.Frame):
         text: the title. expanded: whether the contents start open. command(expanded):
         called after every fold or unfold. padding: the space in px around the
         contents. scrolled: scroll the contents (with a scroll bar that shows when
-        needed) instead of growing with them; max_height: the height in px the open
-        contents take at most when scrolled. The header takes the color options
-        fill_color, hover_color, text_color, arrow_color, and focus_color; theme / bg
-        / scrollbar_*_color style the contents.
+        needed) instead of growing with them; orient: which directions scroll;
+        max_height / max_width: the size in px the open contents take at most along
+        the directions that scroll. state: "normal" or "disabled" (the header).
+        The header takes the color options fill_color, hover_color, text_color,
+        arrow_color, focus_color, and disabled_text_color; theme / bg /
+        scrollbar_*_color style the contents.
         """
         header_theme = {
             **(theme or {}),
@@ -497,7 +574,12 @@ class Foldable(_ScrolledContent, _ThemedBackground, tk.Frame):
         )
         self.outer.grid_columnconfigure(0, weight=1)
         self.outer.grid_rowconfigure(1, weight=1)
-        self.header = _FoldableHeader(self.outer, self, text, theme=header_theme)
+        self._check_orient(orient)
+        if state not in ("normal", "disabled"):
+            raise ValueError("state must be 'normal' or 'disabled'")
+        self.header = _FoldableHeader(
+            self.outer, self, text, theme=header_theme, state=state
+        )
         self.header.grid(row=0, column=0, sticky="ew")
         self.scrolled = scrolled
         self._holder = self  # what is shown or hidden when folding
@@ -511,11 +593,11 @@ class Foldable(_ScrolledContent, _ThemedBackground, tk.Frame):
             )
             self._build_viewport(
                 self._holder,
-                "vertical",
+                orient,
                 True,
                 scrollbar_theme,
                 self.initial_background(master, background),
-                max_height,
+                (max_width, max_height),
             )
             content_master = self.viewport
         kwargs.setdefault("bd", 0)
@@ -543,6 +625,18 @@ class Foldable(_ScrolledContent, _ThemedBackground, tk.Frame):
         self.apply_background()
         if self.scrolled:
             self._refresh_viewport()
+
+    @property
+    def state(self):
+        """'normal' or 'disabled' (the header)."""
+        return self.header.state
+
+    @state.setter
+    def state(self, new_state):
+        """Enable or disable the header."""
+        if new_state not in ("normal", "disabled"):
+            raise ValueError("state must be 'normal' or 'disabled'")
+        self.header.configure(state=new_state, takefocus=new_state != "disabled")
 
     @property
     def text(self):
@@ -599,6 +693,208 @@ class Foldable(_ScrolledContent, _ThemedBackground, tk.Frame):
 
     def destroy(self):
         """Destroy the whole container (the header and the contents with it)."""
+        if self._destroying:
+            # Re-entered while the outer container is being torn down: destroy
+            # normally so this frame's children are destroyed too.
+            tk.Frame.destroy(self)
+            return
+        self._destroying = True
+        if self.scrolled:
+            self._remove_wheel_bindings()
+        self.outer.destroy()
+
+
+class _LabelFrameBorder(CanvasWidget):
+    """The outline of a LabelFrame, with the title set into its top edge."""
+
+    _COLOR_PARTS = ("border_color", "text_color")
+    _CUSTOM_OPTIONS = CanvasWidget._CUSTOM_OPTIONS + (
+        "text",
+        "radius",
+        "border_width",
+    )
+    TITLE_INDENT = 12  # px from the left edge to the title
+    TITLE_GAP = 5  # px of room around the title where the line is cut
+
+    def __init__(self, master, text, radius, border_width, theme=None, **kwargs):
+        super().__init__(master, theme=theme, **kwargs)
+        self.text = text
+        self.radius = radius
+        self.border_width = border_width
+        self.refit()
+        self.schedule_redraw()
+
+    def title_height(self):
+        """The height of the title's line in px."""
+        return self.font.metrics("linespace")
+
+    def requested_size(self):
+        """Wide enough for the title."""
+        width, _ = measure_content(self.text, None, self.font)
+        return (
+            (width + 2 * (self.TITLE_INDENT + self.TITLE_GAP) if self.text else 1),
+            1,
+        )
+
+    def redraw(self, width, height):
+        """Draw the outline (starting at the middle of the title's line), cut the line
+        where the title is, and write the title.
+        """
+        top = self.title_height() / 2
+        self.draw_box(
+            0,
+            top,
+            width,
+            height,
+            None,
+            self.part("border_color", "border"),
+            self.border_width,
+            self.radius,
+        )
+        if not self.text:
+            return
+        text_width, _ = measure_content(self.text, None, self.font)
+        left = self.TITLE_INDENT
+        self.create_rectangle(
+            left - self.TITLE_GAP,
+            0,
+            left + text_width + self.TITLE_GAP,
+            self.title_height(),
+            fill=self._applied_background,
+            width=0,
+            tags=_CANVAS_CHROME_TAG,
+        )
+        self.create_text(
+            left,
+            top,
+            text=self.text,
+            font=self.font,
+            fill=self.part("text_color", "text"),
+            anchor="w",
+            tags=_CANVAS_CHROME_TAG,
+        )
+
+
+class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
+    """A frame with an outline and a title set into the outline's top edge.
+
+    Add the children to the LabelFrame itself, exactly as to a Frame; pack / grid /
+    place act on the whole thing (outline and contents together). With scrolled=True
+    the contents scroll (in the direction orient: "vertical", "horizontal", or
+    "both") when they are bigger than max_height / max_width.
+    """
+
+    _BORDER_COLOR_PARTS = _LabelFrameBorder._COLOR_PARTS
+    _FRAME_OPTIONS = ("text",)
+
+    def __init__(
+        self,
+        master,
+        text="",
+        padding=8,
+        radius=8,
+        border_width=1,
+        scrolled=False,
+        orient="vertical",
+        max_height=300,
+        max_width=300,
+        theme=None,
+        **kwargs,
+    ):
+        """Create the labeled frame.
+
+        text: the title. padding: the space in px between the outline and the contents.
+        radius / border_width: the shape of the outline. scrolled: scroll the contents
+        (with scroll bars that show when needed) instead of growing with them; orient:
+        which directions scroll; max_height / max_width: the size in px the contents
+        take at most along the directions that scroll. border_color and text_color
+        style the outline and the title; theme / bg / scrollbar_*_color style the
+        contents.
+        """
+        self._check_orient(orient)
+        scrollbar_theme = self._pop_scrollbar_theme(kwargs, theme)
+        border_theme = {
+            **(theme or {}),
+            **pop_color_parts(self._BORDER_COLOR_PARTS, kwargs),
+        }
+        background = kwargs.pop("bg", kwargs.pop("background", None))
+        self._init_background(
+            master, background, kwargs.pop("background_role", None), theme
+        )
+        # Structure: outer frame > outline canvas, with this content frame on top of it
+        # in the same cell. The outer frame is the one thing the parent sees.
+        self.outer = Frame(
+            master, background_role=self.background_role, bg=background, theme=theme
+        )
+        self.outer.grid_columnconfigure(0, weight=1)
+        self.outer.grid_rowconfigure(0, weight=1)
+        self.border = _LabelFrameBorder(
+            self.outer, text, radius, border_width, theme=border_theme
+        )
+        self.border.grid(row=0, column=0, sticky="nsew")
+        self.scrolled = scrolled
+        self._holder = self  # what is placed inside the outline
+        content_master = self.outer
+        if scrolled:
+            self._holder = Frame(
+                self.outer,
+                background_role=self.background_role,
+                bg=background,
+                theme=theme,
+            )
+            self._build_viewport(
+                self._holder,
+                orient,
+                True,
+                scrollbar_theme,
+                self.initial_background(master, background),
+                (max_width, max_height),
+            )
+            content_master = self.viewport
+        kwargs.setdefault("bd", 0)
+        kwargs.setdefault("highlightthickness", 0)
+        tk.Frame.__init__(
+            self,
+            content_master,
+            bg=self.initial_background(master, background),
+            **kwargs,
+        )
+        _CANVAS_THEMED_WIDGETS.add(self)
+        if scrolled:
+            self._attach_content()
+        self.padding = padding
+        self._destroying = False
+        for name in _GEOMETRY_METHOD_NAMES:
+            setattr(self, name, getattr(self.outer, name))
+        self._place_contents()
+
+    def _place_contents(self):
+        """Put the contents inside the outline, below the title."""
+        inset = self.padding + self.border.border_width
+        top = self.border.title_height() + self.padding // 2 if self.text else inset
+        tk.Frame.grid(
+            self._holder, row=0, column=0, sticky="nsew", padx=inset, pady=(top, inset)
+        )
+
+    def refresh_theme(self):
+        """The theme changed: re-apply the background."""
+        self.apply_background()
+        if self.scrolled:
+            self._refresh_viewport()
+
+    @property
+    def text(self):
+        """The title."""
+        return self.border.text
+
+    @text.setter
+    def text(self, new_text):
+        """Change the title."""
+        self.border.configure(text=new_text)
+        self._place_contents()
+
+    def destroy(self):
+        """Destroy the whole container (the outline and the contents with it)."""
         if self._destroying:
             # Re-entered while the outer container is being torn down: destroy
             # normally so this frame's children are destroyed too.

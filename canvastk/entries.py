@@ -845,7 +845,7 @@ class Textbox(_FramedWidget):
     """A multi-line text box with a rounded canvas border and an optional
     built-in scrollbar. Everything tk.Text offers is forwarded."""
 
-    _OWN_OPTIONS = _FramedWidget._OWN_OPTIONS + ("yscrollcommand",)
+    _OWN_OPTIONS = _FramedWidget._OWN_OPTIONS + ("yscrollcommand", "xscrollcommand")
     _SCROLLBAR_PARTS = {
         "scrollbar_track_color": "track_color",
         "scrollbar_thumb_color": "thumb_color",
@@ -863,6 +863,8 @@ class Textbox(_FramedWidget):
         width=80,
         height=24,
         yscrollcommand=None,
+        xscrollcommand=None,
+        orient="vertical",
         theme=None,
         radius=8,
         border_width=1,
@@ -872,13 +874,17 @@ class Textbox(_FramedWidget):
     ):
         """Create the text box.
 
-        scrolled: add a built-in canvas scroll bar that hides itself when not needed.
+        scrolled: add built-in canvas scroll bars that hide themselves when not needed.
         wrap / state / width (characters) / height (lines) / font: as tk.Text (80 x 24
         characters by default, like tk.Text).
-        yscrollcommand: for a scroll bar of your own (works together with scrolled).
+        orient: with scrolled, which scroll bars there are: "vertical", "horizontal", or
+        "both". yscrollcommand / xscrollcommand: for scroll bars of your own (they work
+        together with scrolled).
         radius, border_width, focus_border_width: border shape. placeholder: hint
         while empty.
         """
+        if orient not in ("vertical", "horizontal", "both"):
+            raise ValueError("orient must be 'vertical', 'horizontal' or 'both'")
         theme = {**(theme or {}), **self.extract_color_options(kwargs)}
         _FramedWidget.__init__(
             self,
@@ -893,8 +899,9 @@ class Textbox(_FramedWidget):
         kwargs.setdefault("pady", 3)
         # A 1 px cursor: Tk draws a wider one half-clipped at the start of a line.
         kwargs.setdefault("insertwidth", 1)
-        self.scrollbar = None
+        self.scrollbar = self.horizontal_scrollbar = None
         self._user_yscrollcommand = yscrollcommand
+        self._user_xscrollcommand = xscrollcommand
         text = tk.Text(
             self,
             font=make_font(font),
@@ -907,26 +914,49 @@ class Textbox(_FramedWidget):
             highlightthickness=0,
             **kwargs,
         )
-        # With a built-in scroll bar the Text is packed to its left and scrolls it.
         if scrolled:
-            self.scrollbar = Scrollbar(
-                self,
-                command=text.yview,
-                autohide=True,
-                theme={
-                    own_name: theme[name]
-                    for name, own_name in self._SCROLLBAR_PARTS.items()
-                    if name in theme
-                },
-            )
-            self.scrollbar.pack(side="right", fill="y", padx=(0, 5), pady=5)
-            text.configure(yscrollcommand=self._on_yscroll)
+            # Built-in scroll bars: the Text is packed to the left of the vertical one
+            # and above the horizontal one, and scrolls them.
+            vertical, horizontal = orient != "horizontal", orient != "vertical"
+            scrollbar_theme = {
+                own_name: theme[name]
+                for name, own_name in self._SCROLLBAR_PARTS.items()
+                if name in theme
+            }
+            if horizontal:
+                self.horizontal_scrollbar = Scrollbar(
+                    self,
+                    orient="horizontal",
+                    command=text.xview,
+                    autohide=True,
+                    theme=scrollbar_theme,
+                )
+                self.horizontal_scrollbar.pack(
+                    side="bottom", fill="x", padx=5, pady=(0, 5)
+                )
+                text.configure(xscrollcommand=self._on_xscroll)
+            if vertical:
+                self.scrollbar = Scrollbar(
+                    self,
+                    command=text.yview,
+                    autohide=True,
+                    theme=scrollbar_theme,
+                )
+                self.scrollbar.pack(side="right", fill="y", padx=(0, 5), pady=5)
+                text.configure(yscrollcommand=self._on_yscroll)
             self.install_inner(
-                text, side="left", fill="both", expand=True, padx=(7, 2), pady=5
+                text,
+                side="left",
+                fill="both",
+                expand=True,
+                padx=(7, 2) if vertical else 7,
+                pady=(5, 2) if horizontal else 5,
             )
         else:
             if yscrollcommand is not None:
                 text.configure(yscrollcommand=yscrollcommand)
+            if xscrollcommand is not None:
+                text.configure(xscrollcommand=xscrollcommand)
             self.install_inner(text, fill="both", expand=True, padx=7, pady=5)
         text.bind("<Control-a>", self._select_all, add="+")
         self.install_placeholder()
@@ -955,6 +985,14 @@ class Textbox(_FramedWidget):
         if self._user_yscrollcommand is not None:
             self._user_yscrollcommand(first, last)
 
+    def _on_xscroll(self, first, last):
+        """The Text scrolled sideways: update the built-in horizontal scroll bar and
+        pass it on to a user's xscrollcommand.
+        """
+        self.horizontal_scrollbar.set(first, last)
+        if self._user_xscrollcommand is not None:
+            self._user_xscrollcommand(first, last)
+
     def apply_own_options(self, options):
         """Store changed own options; scroll bar colors are also applied to the built-in
         scroll bar.
@@ -964,11 +1002,17 @@ class Textbox(_FramedWidget):
                 self._user_yscrollcommand = value
                 if self.scrollbar is None:
                     self.inner.configure(yscrollcommand=value)
+            elif key == "xscrollcommand":
+                self._user_xscrollcommand = value
+                if self.horizontal_scrollbar is None:
+                    self.inner.configure(xscrollcommand=value)
             elif key in self._COLOR_PARTS:
                 self.set_color_part(key, value)
-                if self.scrollbar is not None and key in self._SCROLLBAR_PARTS:
-                    self.scrollbar.set_color_part(self._SCROLLBAR_PARTS[key], value)
-                    self.scrollbar.schedule_redraw()
+                if key in self._SCROLLBAR_PARTS:
+                    for bar in (self.scrollbar, self.horizontal_scrollbar):
+                        if bar is not None:
+                            bar.set_color_part(self._SCROLLBAR_PARTS[key], value)
+                            bar.schedule_redraw()
             else:
                 setattr(self, key, value)
 

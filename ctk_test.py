@@ -153,8 +153,8 @@ def build_demo():
     add_row("Decimal spinbox", Spinbox(inputs, from_=0, to=1, increment=0.1))
     add_row("Disabled entry", Entry(inputs, state="disabled"))
 
-    # Check boxes, radio buttons, a slider driving a progress bar, and an indeterminate
-    # progress bar.
+    # Check boxes, radio buttons, toggle switches, a slider driving a progress bar and
+    # three meters, and an indeterminate progress bar.
     # --- Toggles tab
     toggles = Frame(notebook)
     notebook.add(toggles, text="Toggles & sliders")
@@ -167,13 +167,22 @@ def build_demo():
     choice = tk.StringVar(toggles, value="Red")
     for name in ("Red", "Green", "Blue"):
         Radiobutton(toggles, name, variable=choice).pack(anchor="w", padx=10, pady=2)
+    switch_row = Frame(toggles)
+    switch_row.pack(fill="x", padx=10, pady=(6, 0))
+    Toggle(switch_row, "Notifications").pack(side="left", padx=(0, 16))
+    Toggle(switch_row, "Already on", variable=tk.IntVar(toggles, value=1)).pack(
+        side="left", padx=(0, 16)
+    )
+    Toggle(switch_row, "Disabled", state="disabled").pack(side="left")
     Separator(toggles).pack(fill="x", padx=10, pady=8)
+    meter_value = tk.DoubleVar(toggles, value=35)
     progress = Progressbar(toggles, length=300)
     scale = Scale(
         toggles,
         from_=0,
         to=100,
         length=300,
+        variable=meter_value,
         command=lambda v: progress.configure(value=v),
     )
     scale.pack(anchor="w", padx=10, pady=4)
@@ -182,22 +191,9 @@ def build_demo():
     busy = Progressbar(toggles, length=300, mode="indeterminate")
     busy.pack(anchor="w", padx=10, pady=4)
     busy.start()
-
-    # Toggle switches, meters in three shapes (one that can be dragged), and foldable
-    # sections that fold away without disturbing the widgets around them.
-    # --- Meters & folds tab
-    gauges = Frame(notebook)
-    notebook.add(gauges, text="Meters & folds")
-    switch_row = Frame(gauges)
-    switch_row.pack(fill="x", padx=10, pady=(10, 4))
-    Toggle(switch_row, "Notifications").pack(side="left", padx=(0, 16))
-    Toggle(switch_row, "Already on", variable=tk.IntVar(gauges, value=1)).pack(
-        side="left", padx=(0, 16)
-    )
-    Toggle(switch_row, "Disabled", state="disabled").pack(side="left")
-    meter_row = Frame(gauges)
+    # The meters share the slider's variable; the first one can be dragged too.
+    meter_row = Frame(toggles)
     meter_row.pack(fill="x", padx=10, pady=4)
-    meter_value = tk.DoubleVar(gauges, value=65)
     Meter(
         meter_row,
         variable=meter_value,
@@ -212,22 +208,13 @@ def build_demo():
     Meter(meter_row, variable=meter_value, shape="semi", subtext="semi", size=170).pack(
         side="left", anchor="s"
     )
-    Scale(gauges, from_=0, to=100, length=300, variable=meter_value).pack(
-        anchor="w", padx=10, pady=4
-    )
-    swatch_row = Frame(gauges)
-    swatch_row.pack(fill="x", padx=10, pady=4)
-    swatch = ColorDisplay(swatch_row, color="#ff8800", size=32)
-    swatch.pack(side="left", padx=(0, 8))
-    Button(
-        swatch_row,
-        "Change color",
-        command=lambda: swatch.config(
-            color=colorchooser.askcolor(swatch.cget("color"), parent=gauges)[1]
-            or swatch.cget("color")
-        ),
-    ).pack(side="left")
-    details = Foldable(gauges, "Details")
+
+    # Foldable sections that fold away without disturbing the widgets around them (open,
+    # nested, scrolled, disabled, and folded at the start), and a labeled frame.
+    # --- Folds & frames tab
+    folds = Frame(notebook)
+    notebook.add(folds, text="Folds & frames")
+    details = Foldable(folds, "Details")
     Label(details, "Everything in here is an ordinary child of the foldable.").pack(
         anchor="w"
     )
@@ -236,14 +223,27 @@ def build_demo():
     Label(more, "A foldable inside a foldable.").pack(anchor="w")
     more.pack(fill="x", pady=(6, 0))
     details.pack(fill="x", padx=10, pady=(10, 4))
-    long_fold = Foldable(gauges, "Scrolled contents", scrolled=True, max_height=90)
+    long_fold = Foldable(folds, "Scrolled contents", scrolled=True, max_height=90)
     for number in range(12):
         Label(long_fold, f"Line {number + 1}").pack(anchor="w")
     long_fold.pack(fill="x", padx=10, pady=4)
-    surprise = Foldable(gauges, "Folded at the start", expanded=False)
+    locked = Foldable(folds, "Disabled foldable", state="disabled")
+    Label(locked, "The header cannot be clicked.").pack(anchor="w")
+    locked.pack(fill="x", padx=10, pady=4)
+    framed = LabelFrame(folds, "A labeled frame")
+    Label(framed, "Everything in here is an ordinary child.").pack(anchor="w")
+    Checkbutton(framed, "A check box").pack(anchor="w")
+    framed.pack(fill="x", padx=10, pady=(10, 4))
+    scrolled_frame = LabelFrame(
+        folds, "A scrolled labeled frame", scrolled=True, max_height=70
+    )
+    for number in range(8):
+        Label(scrolled_frame, f"Line {number + 1}").pack(anchor="w")
+    scrolled_frame.pack(fill="x", padx=10, pady=4)
+    surprise = Foldable(folds, "Folded at the start", expanded=False)
     Label(surprise, "Surprise!").pack(anchor="w")
     surprise.pack(fill="x", padx=10, pady=4)
-    Label(gauges, "This label shares the parent and stays where it is.").pack(
+    Label(folds, "This label shares the parent and stays where it is.").pack(
         anchor="w", padx=10, pady=4
     )
 
@@ -256,12 +256,16 @@ def build_demo():
     textbox = Textbox(
         pane,
         scrolled=True,
-        wrap="word",
+        orient="both",
+        wrap="none",
         width=30,
         height=10,
         placeholder="Start typing here...",
     )
-    textbox.insert("1.0", "A scrolled textbox.\n" * 40)
+    textbox.insert(
+        "1.0", "A scrolled textbox, with a line long enough to need the side bar. " * 3
+    )
+    textbox.insert("end", "\nA scrolled textbox." * 40)
     pane.add(textbox, weight=1)
     listbox = Listbox(
         pane,
@@ -519,6 +523,18 @@ def build_demo():
         Button(
             dialogs_tab, caption, command=lambda ask=ask: dialog_result.set(repr(ask()))
         ).pack(anchor="w", padx=14, pady=4)
+    swatch_row = Frame(dialogs_tab)
+    swatch_row.pack(fill="x", padx=14, pady=(10, 0))
+    swatch = ColorDisplay(swatch_row, color="#ff8800", size=32)
+    swatch.pack(side="left", padx=(0, 8))
+    Button(
+        swatch_row,
+        "Pick the color shown here",
+        command=lambda: swatch.config(
+            color=colorchooser.askcolor(swatch.cget("color"), parent=root)[1]
+            or swatch.cget("color")
+        ),
+    ).pack(side="left")
     Label(dialogs_tab, "The last result (an empty value means cancelled):").pack(
         anchor="w", padx=14, pady=(14, 4)
     )
