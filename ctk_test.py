@@ -395,9 +395,10 @@ def build_demo():
     dialogs_tab = Frame(notebook)
     notebook.add(dialogs_tab, text="Dialogs")
     dialog_result = tk.StringVar(dialogs_tab, value="Pick a dialog to open.")
-    Label(dialogs_tab, "Same API as tkinter.filedialog and tkinter.messagebox:").pack(
-        anchor="w", padx=14, pady=(14, 6)
-    )
+    Label(
+        dialogs_tab,
+        "Same API as tkinter.filedialog, tkinter.messagebox, and tkinter.colorchooser:",
+    ).pack(anchor="w", padx=14, pady=(14, 6))
     text_types = [("Text files", "*.txt"), ("Python files", "*.py *.pyw"), ("All files", "*")]
     for caption, ask in (
         ("askopenfilename", lambda: filedialog.askopenfilename(parent=root, filetypes=text_types)),
@@ -409,6 +410,7 @@ def build_demo():
             ),
         ),
         ("askdirectory", lambda: filedialog.askdirectory(parent=root)),
+        ("askcolor", lambda: colorchooser.askcolor("#3b82f6", parent=root)),
         ("showinfo", lambda: messagebox.showinfo("Saved", "The file was saved.", parent=root)),
         (
             "showwarning",

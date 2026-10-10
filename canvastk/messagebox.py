@@ -103,17 +103,26 @@ def _make_modal(window, parent, size=None):
     """
     _center_on(window, parent, size)
     try:
+        previous_grab = (
+            window.grab_current()
+        )  # another modal window this one opens over
+    except (KeyError, tk.TclError):
+        previous_grab = None
+    try:
         window.wait_visibility()
         window.grab_set()
     except tk.TclError:  # for example, a window manager that refuses grabs
         pass
     window.focus_force()
     window.wait_window()
-    # Closing this window released the grab of the window it was opened over.
-    try:
-        parent.grab_set()
-    except tk.TclError:
-        pass
+    # Closing this window released the grab it took; give it back to the modal window it
+    # was opened over, if there was one (never grab a window that was not grabbed before,
+    # or the other windows of the application stop receiving mouse clicks).
+    if previous_grab is not None:
+        try:
+            previous_grab.grab_set()
+        except tk.TclError:
+            pass
 
 
 # =============================================================================

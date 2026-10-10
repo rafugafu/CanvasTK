@@ -150,7 +150,9 @@ class _CanvasPopup(tk.Toplevel):
         )
         accelerator_width = max(
             measure_widths(
-                self, self.font, [e["accelerator"] for e in entries if e.get("accelerator")]
+                self,
+                self.font,
+                [e["accelerator"] for e in entries if e.get("accelerator")],
             ),
             default=0,
         )

@@ -77,7 +77,7 @@ class Listbox(CanvasWidget):
         row_radius=5,
         scrolled=False,
         theme=None,
-        **kwargs
+        **kwargs,
     ):
         """row_padding: extra px added to the font's line height per row;
         row_radius: corner radius of the selection/hover highlight;
@@ -225,7 +225,9 @@ class Listbox(CanvasWidget):
         same when its selection is exported). Raises TclError if nothing is selected.
         """
         if not self._selected:
-            raise tk.TclError('PRIMARY selection doesn\'t exist or form "STRING" not defined')
+            raise tk.TclError(
+                'PRIMARY selection doesn\'t exist or form "STRING" not defined'
+            )
         return "\n".join(str(self._items[row]) for row in sorted(self._selected))
 
     def selection_set(self, first, last=None):

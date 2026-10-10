@@ -69,10 +69,12 @@ from .windows import (
     Window,
 )
 
-# The file dialogs and message boxes, used as canvastk.filedialog.askopenfilename(...) like tkinter's.
-from . import filedialog, messagebox
+# The file dialogs, message boxes, and color picker, used as
+# canvastk.filedialog.askopenfilename(...) like tkinter's.
+from . import colorchooser, filedialog, messagebox
 
 __all__ = [
+    "colorchooser",
     "filedialog",
     "messagebox",
     "GridPanedwindow",
