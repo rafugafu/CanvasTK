@@ -1,4 +1,4 @@
-"""Button, Label, Checkbutton, and Radiobutton: the simple canvas-drawn widgets.
+"""Button, Label, Checkbutton, Radiobutton, and Toggle: the simple canvas-drawn widgets.
 
 Each draws itself with CanvasWidget.draw_box / draw_content, takes every color
 as a named option (see _COLOR_PARTS) and follows the theme.
@@ -9,6 +9,7 @@ import tkinter as tk
 from ._core import (
     CanvasWidget,
     hover_variant,
+    _blend_colors,
     _CANVAS_CHROME_TAG,
     _inside,
     measure_content,
@@ -606,4 +607,137 @@ class Radiobutton(_ToggleButton):
                     if self.indicator_radius is None
                     else self.indicator_radius / 2
                 ),
+            )
+
+
+class Toggle(Checkbutton):
+    """An on/off switch: a rounded track with a knob that slides across.
+
+    It works exactly like a Checkbutton (the variable, onvalue / offvalue, command,
+    invoke / select / deselect / toggle) and takes the same text and colors, plus
+    knob_color. The knob and the track color change smoothly when the state changes,
+    whether by a click, by Space, or by something else setting the variable.
+    """
+
+    _COLOR_PARTS = _ToggleButton._COLOR_PARTS + ("knob_color",)
+    KNOB_PADDING = 3
+    FRAME_INTERVAL = 15  # ms between two frames of the slide
+
+    def __init__(
+        self,
+        master,
+        text="",
+        variable=None,
+        onvalue=1,
+        offvalue=0,
+        command=None,
+        theme=None,
+        indicator_size=22,
+        **kwargs
+    ):
+        """Create the switch; indicator_size is the track's height in px (its width is
+        1.8 times that). Everything else is as for Checkbutton.
+        """
+        self._position = 0.0  # where the knob is: 0 = off, 1 = on (animated)
+        self._animation_id = None
+        super().__init__(
+            master,
+            text,
+            variable,
+            onvalue,
+            offvalue,
+            command,
+            theme,
+            indicator_size=indicator_size,
+            **kwargs
+        )
+        self._position = 1.0 if self.is_selected() else 0.0
+
+    def track_width(self):
+        """The width of the track in px."""
+        return round(self.indicator_size * 1.8)
+
+    def requested_size(self):
+        """The track plus the spacing and the text, with a little margin."""
+        text_width, text_height = measure_content(self.text, None, self.font)
+        return (
+            2
+            + self.track_width()
+            + (self.spacing + text_width if text_width else 0)
+            + 4,
+            max(self.indicator_size + 6, text_height + 8),
+        )
+
+    def _step_animation(self):
+        """Move the knob a part of the way to where it belongs, and go on until it
+        arrives.
+        """
+        self._animation_id = None
+        target = 1.0 if self.is_selected() else 0.0
+        distance = target - self._position
+        if abs(distance) < 0.04:
+            self._position = target
+        else:
+            self._position += distance * 0.4
+            self._animation_id = self.call_later(
+                self.FRAME_INTERVAL, self._step_animation
+            )
+        self.schedule_redraw()
+
+    def redraw(self, width, height):
+        """Draw the track (its color blended between off and on), the knob, and the
+        text beside them.
+        """
+        size = self.indicator_size
+        track_width = self.track_width()
+        top = round((height - size) / 2)
+        target = 1.0 if self.is_selected() else 0.0
+        if self._position != target and self._animation_id is None:
+            self._animation_id = self.call_later(
+                self.FRAME_INTERVAL, self._step_animation
+            )
+        position = self._position
+        if self.is_disabled():
+            off = self.part("disabled_unchecked_color", "surface_disabled")
+            on = self.part("disabled_fill_color", "text_disabled")
+            outline = self.part("disabled_border_color", "border")
+        else:
+            off = self.part("unchecked_color", "track")
+            on = self.part("fill_color", "accent")
+            if self._focused:
+                outline = self.part("focus_color", "focus_ring")
+            elif self._hovered:
+                outline = self.part("hover_border_color", "accent")
+            else:
+                outline = self.part("border_color", "border")
+        track = _blend_colors(self.rc(off), self.rc(on), position)
+        if not (self._focused or self._hovered) or self.is_disabled():
+            outline = _blend_colors(self.rc(outline), track, position)
+        self.draw_box(
+            2, top, 2 + track_width, top + size, track, outline, 1.5, size / 2
+        )
+        knob = size - 2 * self.KNOB_PADDING
+        knob_left = 2 + self.KNOB_PADDING + position * (track_width - size)
+        knob_color = _blend_colors(
+            self.rc(self.part("knob_color", "surface")),
+            self.rc(self.part("check_color", "accent_text")),
+            position,
+        )
+        self.draw_box(
+            knob_left,
+            top + self.KNOB_PADDING,
+            knob_left + knob,
+            top + self.KNOB_PADDING + knob,
+            knob_color,
+            radius=knob / 2,
+        )
+        if self.text:
+            self.create_text(
+                2 + track_width + self.spacing,
+                height / 2,
+                text=self.text,
+                font=self.font,
+                fill=self.current_text_color(),
+                anchor="w",
+                tags=_CANVAS_CHROME_TAG,
             )

@@ -1,4 +1,4 @@
-"""Containers: Frame, ScrolledFrame, Notebook, Panedwindow, and GridPanedwindow.
+"""Containers: Frame, ScrolledFrame, Foldable, Notebook, Panedwindow, and GridPanedwindow.
 
 They are tk.Frame subclasses (not canvases): they hold other widgets. Frames
 follow the theme's background; the notebook draws its tabs, the panedwindows
@@ -320,6 +320,207 @@ class ScrolledFrame(_ThemedBackground, tk.Frame):
                 self._top.unbind(sequence, funcid)
             except tk.TclError:
                 pass
+        self.outer.destroy()
+
+
+class _FoldableHeader(CanvasWidget):
+    """The clickable header bar of a Foldable: an arrow and the title."""
+
+    _COLOR_PARTS = (
+        "fill_color",
+        "hover_color",
+        "text_color",
+        "arrow_color",
+        "focus_color",
+    )
+    _CUSTOM_OPTIONS = CanvasWidget._CUSTOM_OPTIONS + ("text",)
+    DEFAULT_FONT_WEIGHT = "bold"
+    VERTICAL_PADDING = 8
+
+    def __init__(self, master, foldable, text, theme=None, **kwargs):
+        """`foldable` is the Foldable the bar belongs to (it says whether it is open and
+        is told when the bar is clicked).
+        """
+        super().__init__(master, theme=theme, takefocus=True, **kwargs)
+        self.foldable = foldable
+        self.text = text
+        self._pressed = False
+        self.track_interaction()
+        self.bind("<ButtonPress-1>", self._on_press, add="+")
+        self.bind("<ButtonRelease-1>", self._on_release, add="+")
+        self.bind("<space>", lambda _: foldable.toggle(), add="+")
+        self.bind("<Return>", lambda _: foldable.toggle(), add="+")
+        self.refit()
+        self.schedule_redraw()
+
+    def requested_size(self):
+        """Tall enough for the title, as wide as the title and the arrow."""
+        width, height = measure_content(self.text, None, self.font)
+        return width + 44, height + 2 * self.VERTICAL_PADDING
+
+    def _on_press(self, _):
+        """Mouse down: a release inside the bar will fold or unfold."""
+        self._pressed = True
+        self.focus_set()
+
+    def _on_release(self, event):
+        """Mouse up inside the bar: fold or unfold the contents."""
+        was_pressed, self._pressed = self._pressed, False
+        if (
+            was_pressed
+            and 0 <= event.x < self.winfo_width()
+            and 0 <= event.y < self.winfo_height()
+        ):
+            self.foldable.toggle()
+
+    def redraw(self, width, height):
+        """Draw the bar, the arrow (down while open, right while folded), and the title."""
+        fill = self.part("hover_color", "neutral_hover") if self._hovered else None
+        fill = fill or self.part("fill_color", "neutral")
+        outline = self.part("focus_color", "focus_ring") if self._focused else None
+        self.draw_box(0, 0, width, height, fill, outline, 2 if outline else 0, 8)
+        direction = "down" if self.foldable.is_expanded() else "right"
+        self.draw_chevron(
+            19, height / 2, direction, self.part("arrow_color", "text_muted"), 4, 2
+        )
+        self.create_text(
+            34,
+            height / 2,
+            text=self.text,
+            font=self.font,
+            fill=self.part("text_color", "text"),
+            anchor="w",
+            tags=_CANVAS_CHROME_TAG,
+        )
+
+
+class Foldable(_ThemedBackground, tk.Frame):
+    """A frame that can be folded away: a header bar with an arrow and a title, and the
+    contents under it.
+
+    Add the children to the Foldable itself, exactly as to a Frame; pack / grid / place
+    act on the whole thing (header and contents together), and it takes one place in
+    its parent whether it is open or folded. The header and the contents live in a
+    container of their own, so folding only changes the size of the Foldable and never
+    puts anything into the parent or moves the parent's other widgets around except
+    for the space the Foldable itself takes. Click the header, or press Space or Return
+    on it, to fold or unfold; expand(), collapse(), and toggle() do it from code.
+    """
+
+    _HEADER_COLOR_PARTS = _FoldableHeader._COLOR_PARTS
+
+    def __init__(
+        self,
+        master,
+        text="",
+        expanded=True,
+        command=None,
+        padding=8,
+        theme=None,
+        **kwargs,
+    ):
+        """Create the foldable.
+
+        text: the title. expanded: whether the contents start open. command(expanded):
+        called after every fold or unfold. padding: the space in px around the
+        contents. The header takes the color options fill_color, hover_color,
+        text_color, arrow_color, and focus_color; theme / bg style the contents.
+        """
+        header_theme = {
+            **(theme or {}),
+            **pop_color_parts(self._HEADER_COLOR_PARTS, kwargs),
+        }
+        background = kwargs.pop("bg", kwargs.pop("background", None))
+        self._init_background(
+            master, background, kwargs.pop("background_role", None), theme
+        )
+        # Structure: outer frame > header bar + this content frame. The outer frame is
+        # the one thing the parent sees.
+        self.outer = Frame(
+            master, background_role=self.background_role, bg=background, theme=theme
+        )
+        self.outer.grid_columnconfigure(0, weight=1)
+        self.outer.grid_rowconfigure(1, weight=1)
+        self.header = _FoldableHeader(self.outer, self, text, theme=header_theme)
+        self.header.grid(row=0, column=0, sticky="ew")
+        kwargs.setdefault("bd", 0)
+        kwargs.setdefault("highlightthickness", 0)
+        tk.Frame.__init__(
+            self,
+            self.outer,
+            bg=self.initial_background(master, background),
+            **kwargs,
+        )
+        _CANVAS_THEMED_WIDGETS.add(self)
+        self.padding = padding
+        self.command = command
+        self._expanded = False
+        self._destroying = False
+        for name in _GEOMETRY_METHOD_NAMES:
+            setattr(self, name, getattr(self.outer, name))
+        if expanded:
+            self.expand(notify=False)
+
+    def refresh_theme(self):
+        """The theme changed: re-apply the background."""
+        self.apply_background()
+
+    @property
+    def text(self):
+        """The title in the header."""
+        return self.header.text
+
+    @text.setter
+    def text(self, new_text):
+        """Change the title."""
+        self.header.text = new_text
+        self.header.refit()
+        self.header.schedule_redraw()
+
+    def is_expanded(self):
+        """Whether the contents are showing."""
+        return self._expanded
+
+    def expand(self, notify=True):
+        """Show the contents."""
+        self._set_expanded(True, notify)
+
+    def collapse(self, notify=True):
+        """Fold the contents away."""
+        self._set_expanded(False, notify)
+
+    def toggle(self):
+        """Fold if open, unfold if folded."""
+        self._set_expanded(not self._expanded, True)
+
+    def _set_expanded(self, expanded, notify):
+        """Show or hide the contents inside the container (nothing outside it changes),
+        redraw the header, and tell the command and the <<FoldableToggled>> event.
+        """
+        if expanded == self._expanded:
+            return
+        self._expanded = expanded
+        if expanded:
+            pad = self.padding
+            tk.Frame.grid(
+                self, row=1, column=0, sticky="nsew", padx=pad, pady=(pad, pad)
+            )
+        else:
+            tk.Frame.grid_remove(self)
+        self.header.schedule_redraw()
+        if notify:
+            self.event_generate("<<FoldableToggled>>")
+            if self.command is not None:
+                self.command(expanded)
+
+    def destroy(self):
+        """Destroy the whole container (the header and the contents with it)."""
+        if self._destroying:
+            # Re-entered while the outer container is being torn down: destroy
+            # normally so this frame's children are destroyed too.
+            tk.Frame.destroy(self)
+            return
+        self._destroying = True
         self.outer.destroy()
 
 

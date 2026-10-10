@@ -1,15 +1,32 @@
-"""Scale, Progressbar, Scrollbar, and Separator: the track-and-thumb widgets.
+"""Scale, Progressbar, Meter, Scrollbar, and Separator: the track-and-thumb widgets.
 
 Scale and Progressbar share _Slider's geometry (a rounded track along one axis);
 Scrollbar speaks tkinter's scrollbar protocol (set() / command()).
 """
 
+import math
 import tkinter as tk
+
+from PIL import Image, ImageDraw, ImageTk
 
 from ._core import (
     CanvasWidget,
     _CANVAS_CHROME_TAG,
+    make_font,
 )
+
+# Cache of the meter's ring images (PIL images, so they do not belong to any Tk root).
+_METER_IMAGE_CACHE = {}
+_METER_IMAGE_CACHE_LIMIT = 200
+_METER_IMAGE_SUPERSAMPLE = 4
+# For every shape of the meter: the angle where the ring starts and how far it goes
+# round, in degrees clockwise from the 3 o'clock position (the way Pillow measures
+# them).
+_METER_SHAPES = {
+    "circle": (270, 360),  # from the top, all the way round
+    "semi": (180, 180),  # from the left over the top to the right
+    "gauge": (135, 270),  # from the bottom left over the top to the bottom right
+}
 
 # =============================================================================
 # Scale / Progressbar / Scrollbar / Separator
@@ -84,7 +101,7 @@ class Scale(_Slider):
         track_thickness=6,
         thumb_size=18,
         theme=None,
-        **kwargs
+        **kwargs,
     ):
         """Create the slider.
 
@@ -268,7 +285,7 @@ class Progressbar(_Slider):
         variable=None,
         track_thickness=10,
         theme=None,
-        **kwargs
+        **kwargs,
     ):
         """Create the bar.
 
@@ -375,6 +392,300 @@ class Progressbar(_Slider):
             )
 
 
+class Meter(CanvasWidget):
+    """A round meter: a ring that fills up to a value, with the value written inside.
+
+    shape is 'gauge' (a ring with a gap at the bottom, the default), 'circle' (a whole
+    ring that starts at the top), or 'semi' (half a ring). The value goes from `from_`
+    to `to` and can be read and assigned (`value`) or driven by a tk variable. The
+    text in the middle is the value followed by `suffix` unless you give `text`;
+    `subtext` is a smaller line under it. With interactive=True the ring can be
+    dragged (or stepped with the arrow keys) and command(value) is called.
+    """
+
+    _COLOR_PARTS = (
+        "track_color",
+        "indicator_color",
+        "text_color",
+        "subtext_color",
+    )
+    _CUSTOM_OPTIONS = CanvasWidget._CUSTOM_OPTIONS + (
+        "value",
+        "from_",
+        "to",
+        "variable",
+        "thickness",
+        "shape",
+        "text",
+        "suffix",
+        "subtext",
+        "interactive",
+        "command",
+        "step",
+        "decimals",
+    )
+
+    def __init__(
+        self,
+        master,
+        value=0,
+        from_=0,
+        to=100,
+        size=180,
+        thickness=16,
+        shape="gauge",
+        text=None,
+        suffix="",
+        subtext="",
+        variable=None,
+        interactive=False,
+        command=None,
+        step=1,
+        decimals=None,
+        theme=None,
+        **kwargs,
+    ):
+        """Create the meter.
+
+        size: the width in px (the height follows from the shape). thickness: the width
+        of the ring. step: what the value moves by when the ring is dragged or an arrow
+        key is pressed. decimals: how many decimals the text in the middle shows (the
+        value is rounded for the text only; None = as many as `step` has). The other
+        options are described in the class.
+        """
+        if shape not in _METER_SHAPES:
+            raise ValueError("shape must be 'gauge', 'circle', or 'semi'")
+        self.shape = shape
+        self.thickness = thickness
+        kwargs.setdefault("width", size)
+        kwargs.setdefault("height", self._height_for(size, thickness, shape))
+        super().__init__(master, theme=theme, takefocus=interactive, **kwargs)
+        self.from_ = from_
+        self.to = to
+        self._value = value
+        self.variable = variable
+        self.text = text
+        self.suffix = suffix
+        self.subtext = subtext
+        self.interactive = interactive
+        self.command = command
+        self.step = step
+        self.decimals = decimals
+        self.watch_variable(variable)
+        self.bind("<ButtonPress-1>", self._on_pointer, add="+")
+        self.bind("<B1-Motion>", self._on_pointer, add="+")
+        for key, direction in (("Left", -1), ("Down", -1), ("Right", 1), ("Up", 1)):
+            self.bind(f"<{key}>", lambda _, d=direction: self._nudge(d), add="+")
+        self.schedule_redraw()
+
+    @staticmethod
+    def _height_for(size, thickness, shape):
+        """The height that fits the ring (and its round ends) for a width of `size`."""
+        radius = (size - thickness) / 2 - 2
+        if shape == "semi":
+            return round(radius + thickness + 6)
+        if shape == "gauge":
+            return round(
+                size / 2 + radius * math.sin(math.radians(45)) + thickness / 2 + 6
+            )
+        return size
+
+    def _apply_options(self, options):
+        """Also (re)attach the watch when the variable option changes, and make the
+        meter focusable only while it can be changed.
+        """
+        super()._apply_options(options)
+        if "variable" in options:
+            self.watch_variable(self.variable)
+        if "interactive" in options:
+            self.configure(takefocus=self.interactive)
+
+    @property
+    def value(self):
+        """The current value: the variable's if there is one (from_ if unusable), else
+        the stored one.
+        """
+        if self.variable is not None:
+            try:
+                return float(self.variable.get())
+            except (tk.TclError, ValueError):
+                return float(self.from_)
+        return self._value
+
+    @value.setter
+    def value(self, new_value):
+        """Set the value, writing it through to the tk variable if there is one."""
+        if self.variable is not None:
+            self.variable.set(new_value)
+        self._value = new_value
+        self.schedule_redraw()
+
+    def fraction(self):
+        """How far the ring is filled, from 0 to 1."""
+        span = self.to - self.from_
+        return min(max((self.value - self.from_) / span, 0), 1) if span else 0.0
+
+    def shown_value(self):
+        """The value as the text in the middle shows it: rounded to `decimals` places
+        (by default as many as `step` has, so none for a step of 1) and followed by the
+        suffix. The value itself is not changed.
+        """
+        decimals = self.decimals
+        if decimals is None:
+            fraction = f"{abs(self.step or 1):.6f}".rstrip("0").partition(".")[2]
+            decimals = len(fraction)
+        text = f"{round(self.value, decimals):.{decimals}f}"
+        if text.lstrip("-").strip("0.") == "":  # no "-0" for a tiny negative number
+            text = text.lstrip("-")
+        return text + self.suffix
+
+    def _geometry(self, width, height):
+        """(center x, center y, ring radius) for the widget's size."""
+        radius = (width - self.thickness) / 2 - 2
+        center_y = (
+            radius + self.thickness / 2 + 2 if self.shape == "semi" else width / 2
+        )
+        return width / 2, center_y, radius
+
+    # ---- changing the value with the pointer or keys -------------------------------
+    def _commit(self, new_value):
+        """Make a user's change: clamp, round to the step, store, and call command."""
+        low, high = sorted((self.from_, self.to))
+        new_value = min(max(new_value, low), high)
+        if self.step:
+            new_value = (
+                self.from_ + round((new_value - self.from_) / self.step) * self.step
+            )
+            new_value = min(max(new_value, low), high)
+        if new_value != self.value:
+            self.value = new_value
+            if self.command is not None:
+                self.command(new_value)
+
+    def _on_pointer(self, event):
+        """Press or drag on an interactive meter: set the value at the pointer's angle."""
+        if not self.interactive or self.is_disabled():
+            return
+        if event.type == tk.EventType.ButtonPress:
+            self.focus_set()
+        start, sweep = _METER_SHAPES[self.shape]
+        cx, cy, _ = self._geometry(self.winfo_width(), self.winfo_height())
+        angle = math.degrees(math.atan2(event.y - cy, event.x - cx)) % 360
+        along = (angle - start) % 360
+        if along > sweep:  # in the gap: go to the nearer end
+            along = sweep if along - sweep < 360 - along else 0
+        fraction = along / sweep
+        previous = self.fraction()
+        if abs(fraction - previous) > 0.5:  # do not jump across the gap or the top
+            fraction = 1.0 if previous > 0.5 else 0.0
+        self._commit(self.from_ + fraction * (self.to - self.from_))
+
+    def _nudge(self, direction):
+        """Arrow keys on an interactive meter: move the value by one step."""
+        if self.interactive and not self.is_disabled():
+            sign = 1 if self.to >= self.from_ else -1
+            self._commit(self.value + direction * sign * (self.step or 1))
+
+    # ---- drawing ---------------------------------------------------------------
+    def _ring_image(self, width, height, fraction, track, indicator):
+        """The anti-aliased ring (track, then the filled part with round ends) as a PIL
+        image, cached for each size, fill (to 1/500), and pair of colors.
+        """
+        key = (
+            width,
+            height,
+            self.shape,
+            self.thickness,
+            round(fraction * 500),
+            track,
+            indicator,
+        )
+        image = _METER_IMAGE_CACHE.get(key)
+        if image is not None:
+            return image
+        scale = _METER_IMAGE_SUPERSAMPLE
+        big = Image.new("RGBA", (width * scale, height * scale), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(big)
+        cx, cy, radius = (part * scale for part in self._geometry(width, height))
+        thickness = self.thickness * scale
+        # Pillow draws a thick arc inwards from its box, so the box is the ring's outer
+        # edge and `radius` (where the round ends sit) is the middle of the stroke.
+        outer = radius + thickness / 2
+        box = (cx - outer, cy - outer, cx + outer, cy + outer)
+        start, sweep = _METER_SHAPES[self.shape]
+
+        def cap(angle, color):
+            """A round end of the ring at a Pillow angle."""
+            x = cx + radius * math.cos(math.radians(angle))
+            y = cy + radius * math.sin(math.radians(angle))
+            draw.ellipse(
+                (
+                    x - thickness / 2,
+                    y - thickness / 2,
+                    x + thickness / 2,
+                    y + thickness / 2,
+                ),
+                fill=color,
+            )
+
+        def ring(portion, color):
+            """The ring from its start to `portion` (0-1) of the way round."""
+            if portion >= 1 and sweep == 360:
+                draw.ellipse(box, outline=color, width=round(thickness))
+                return
+            draw.arc(
+                box, start, start + portion * sweep, fill=color, width=round(thickness)
+            )
+            cap(start, color)
+            cap(start + portion * sweep, color)
+
+        ring(1, track)
+        if fraction > 0:
+            ring(fraction, indicator)
+        image = big.resize((width, height), Image.Resampling.LANCZOS)
+        if len(_METER_IMAGE_CACHE) >= _METER_IMAGE_CACHE_LIMIT:
+            _METER_IMAGE_CACHE.clear()
+        _METER_IMAGE_CACHE[key] = image
+        return image
+
+    def redraw(self, width, height):
+        """Draw the ring, the value in the middle, and the subtext under it."""
+        track = self.part("track_color", "track")
+        indicator = self.part("indicator_color", "accent")
+        image = ImageTk.PhotoImage(
+            self._ring_image(width, height, self.fraction(), track, indicator)
+        )
+        self._images.append(image)
+        self.create_image(0, 0, anchor="nw", image=image, tags=_CANVAS_CHROME_TAG)
+        cx, cy, radius = self._geometry(width, height)
+        value_font = make_font(None, max(10, round(radius * 0.38)), "bold")
+        shown = self.text if self.text is not None else self.shown_value()
+        line = value_font.metrics("linespace")
+        # Where the value (and the subtext under it) sit: centered in a ring, and above
+        # the flat bottom of a half ring.
+        if self.shape == "semi":
+            value_y = cy - (0.85 if self.subtext else 0.55) * line
+        else:
+            value_y = cy - (0.25 if self.subtext else 0) * line
+        self.create_text(
+            cx,
+            value_y,
+            text=shown,
+            font=value_font,
+            fill=self.part("text_color", "text"),
+            tags=_CANVAS_CHROME_TAG,
+        )
+        if self.subtext:
+            self.create_text(
+                cx,
+                value_y + 0.8 * line,
+                text=self.subtext,
+                font=self.font,
+                fill=self.part("subtext_color", "text_muted"),
+                tags=_CANVAS_CHROME_TAG,
+            )
+
+
 class Scrollbar(CanvasWidget):
     """A scroll bar that works like tkinter's: connect it with command= and set().
 
@@ -405,7 +716,7 @@ class Scrollbar(CanvasWidget):
         autohide=False,
         thickness=14,
         theme=None,
-        **kwargs
+        **kwargs,
     ):
         """Create the bar; orient 'vertical'/'horizontal', command: the scrolled
         widget's xview/yview, thickness: width in px.

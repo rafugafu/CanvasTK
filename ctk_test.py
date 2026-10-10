@@ -183,6 +183,54 @@ def build_demo():
     busy.pack(anchor="w", padx=10, pady=4)
     busy.start()
 
+    # Toggle switches, meters in three shapes (one that can be dragged), and foldable
+    # sections that fold away without disturbing the widgets around them.
+    # --- Meters & folds tab
+    gauges = Frame(notebook)
+    notebook.add(gauges, text="Meters & folds")
+    switch_row = Frame(gauges)
+    switch_row.pack(fill="x", padx=10, pady=(10, 4))
+    Toggle(switch_row, "Notifications").pack(side="left", padx=(0, 16))
+    Toggle(switch_row, "Already on", variable=tk.IntVar(gauges, value=1)).pack(
+        side="left", padx=(0, 16)
+    )
+    Toggle(switch_row, "Disabled", state="disabled").pack(side="left")
+    meter_row = Frame(gauges)
+    meter_row.pack(fill="x", padx=10, pady=4)
+    meter_value = tk.DoubleVar(gauges, value=65)
+    Meter(
+        meter_row,
+        variable=meter_value,
+        suffix="%",
+        subtext="drag me",
+        interactive=True,
+        size=170,
+    ).pack(side="left", padx=(0, 16))
+    Meter(
+        meter_row, variable=meter_value, shape="circle", subtext="circle", size=150
+    ).pack(side="left", padx=(0, 16))
+    Meter(
+        meter_row, variable=meter_value, shape="semi", subtext="semi", size=170
+    ).pack(side="left", anchor="s")
+    Scale(gauges, from_=0, to=100, length=300, variable=meter_value).pack(
+        anchor="w", padx=10, pady=4
+    )
+    details = Foldable(gauges, "Details")
+    Label(details, "Everything in here is an ordinary child of the foldable.").pack(
+        anchor="w"
+    )
+    Checkbutton(details, "A check box inside").pack(anchor="w")
+    more = Foldable(details, "Even more (nested)", expanded=False)
+    Label(more, "A foldable inside a foldable.").pack(anchor="w")
+    more.pack(fill="x", pady=(6, 0))
+    details.pack(fill="x", padx=10, pady=(10, 4))
+    surprise = Foldable(gauges, "Folded at the start", expanded=False)
+    Label(surprise, "Surprise!").pack(anchor="w")
+    surprise.pack(fill="x", padx=10, pady=4)
+    Label(gauges, "This label shares the parent and stays where it is.").pack(
+        anchor="w", padx=10, pady=4
+    )
+
     # A scrolled text box and a scrolled list box in a horizontal panedwindow.
     # --- Text tab
     text_tab = Frame(notebook)

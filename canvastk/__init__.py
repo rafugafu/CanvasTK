@@ -35,8 +35,10 @@ from .buttons import (
     Checkbutton,
     Label,
     Radiobutton,
+    Toggle,
 )
 from .sliders import (
+    Meter,
     Progressbar,
     Scale,
     Scrollbar,
@@ -58,6 +60,7 @@ from .listbox import (
     Listbox,
 )
 from .containers import (
+    Foldable,
     Frame,
     GridPanedwindow,
     Notebook,
@@ -92,11 +95,13 @@ __all__ = [
     "Checkbutton",
     "Combobox",
     "Entry",
+    "Foldable",
     "Frame",
     "Label",
     "Listbox",
     "Menu",
     "MenuBar",
+    "Meter",
     "Notebook",
     "OptionMenu",
     "Panedwindow",
@@ -108,6 +113,7 @@ __all__ = [
     "Separator",
     "Spinbox",
     "Textbox",
+    "Toggle",
     "Tooltip",
     "Toplevel",
     "Window",
