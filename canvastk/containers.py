@@ -1999,7 +1999,47 @@ class _Sash(CanvasWidget):
             self.draw_box(cx - 1.5, cy - 1.5, cx + 1.5, cy + 1.5, dot, radius=1.5)
 
 
-class Panedwindow(_FrameColorParts, _WidgetPlumbing, tk.Frame):
+class _PaneMeasuring:
+    """The sizing shared by Panedwindow and GridPanedwindow. The panes are placed, so
+    Tk does not count them in the widget's own requested size, and the size a pane asks
+    for is only right once Tk has laid its widgets out (which happens when the program
+    is idle, after the pane was added). So the panes are measured again when idle and
+    when the widget is first shown, and the widget asks for the size its panes need
+    (unless it was given a width or height).
+    """
+
+    def _init_measuring(self, options):
+        """Set up the measuring; `options` are the options the frame was created with."""
+        self._fixed_size = "width" in options or "height" in options
+        self._measure_id = None
+        self._measured_on_map = False
+        tk.Frame.bind(self, "<Map>", lambda _: self._on_map(), add="+")
+
+    def _schedule_measure(self):
+        """Measure the panes once the program is idle."""
+        if self._measure_id is None:
+            self._measure_id = self.call_later(None, self._measure)
+
+    def _on_map(self):
+        """The first time the widget is shown: measure the panes again."""
+        if not self._measured_on_map:
+            self._measured_on_map = True
+            self._schedule_measure()
+
+    def _measure(self):
+        """Measure the panes, ask for the size they need, and place them."""
+        self._measure_id = None
+        # Let Tk lay out the panes' own widgets first: this runs as soon as the program
+        # is idle, which can be before the panes ask for their real size.
+        self.update_idletasks()
+        self._measure_panes()
+        size = self._natural_size()
+        if size is not None and not self._fixed_size:
+            tk.Frame.configure(self, width=size[0], height=size[1])
+        self._layout()
+
+
+class Panedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame):
     """Resizable panes separated by draggable canvas-drawn sashes.
 
     Color options: sash_color, sash_active_color (hovered/dragged),
@@ -2029,6 +2069,8 @@ class Panedwindow(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         # Each pane is a dict: child widget, weight, and current size in px.
         self._panes = []
         self._sashes = []
+        self._user_sized = False  # a sash was moved: the sizes are no longer natural
+        self._init_measuring(kwargs)
         tk.Frame.bind(self, "<Configure>", lambda _: self._layout(), add="+")
 
     def on_theme_changed(self):
@@ -2067,6 +2109,7 @@ class Panedwindow(_FrameColorParts, _WidgetPlumbing, tk.Frame):
                 _Sash(self, self, len(self._sashes), theme=self._theme_overrides)
             )
         self._layout()
+        self._schedule_measure()
 
     def forget(self, pane):
         """Remove a pane (the widget is kept, not destroyed)."""
@@ -2075,6 +2118,27 @@ class Panedwindow(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         if self._sashes:
             self._sashes.pop().destroy()
         self._layout()
+        self._schedule_measure()
+
+    def _measure_panes(self):
+        """Give every pane the size it asks for, unless the sashes were moved."""
+        if self._user_sized:
+            return
+        axis = 0 if self.orient == "horizontal" else 1
+        for record in self._panes:
+            record["size"] = max(requested_size_of(record["child"])[axis], 1)
+
+    def _natural_size(self):
+        """The (width, height) the panes need together, or None without panes."""
+        if not self._panes:
+            return None
+        horizontal = self.orient == "horizontal"
+        sashes = _Sash.THICKNESS * (len(self._panes) - 1)
+        along = sum(r["size"] for r in self._panes) + sashes
+        across = max(
+            requested_size_of(r["child"])[1 if horizontal else 0] for r in self._panes
+        )
+        return (round(along), across) if horizontal else (across, round(along))
 
     remove = forget
 
@@ -2118,6 +2182,7 @@ class Panedwindow(_FrameColorParts, _WidgetPlumbing, tk.Frame):
             total - self.MINIMUM_PANE_SIZE,
         )
         before["size"], after["size"] = new_size, total - new_size
+        self._user_sized = True
         self._place_all()
 
     def _fit_sizes(self, available):
@@ -2231,7 +2296,7 @@ class _PaneSplit:
         return self.grid.is_hot(self, index)
 
 
-class GridPanedwindow(_FrameColorParts, _WidgetPlumbing, tk.Frame):
+class GridPanedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame):
     """Resizable panes in one widget that can be split in both directions, as
     often as you like: split any pane horizontally or vertically, and split
     the new panes again. Every split has its own draggable sashes, and where
@@ -2267,6 +2332,7 @@ class GridPanedwindow(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         # again after every layout, and the one currently highlighted.
         self._junctions = []
         self._hot_junction = None
+        self._init_measuring(kwargs)
         tk.Frame.bind(self, "<Configure>", lambda _: self._layout(), add="+")
 
     def on_theme_changed(self):
@@ -2350,6 +2416,7 @@ class GridPanedwindow(_FrameColorParts, _WidgetPlumbing, tk.Frame):
                 self._pane_tree = split
                 self._ensure_sashes(split)
         self._layout()
+        self._schedule_measure()
 
     def split(self, target, child, orient="horizontal", before=False, ratio=0.5):
         """Split the pane `target` in two: `child` goes beside it, to its
@@ -2382,6 +2449,7 @@ class GridPanedwindow(_FrameColorParts, _WidgetPlumbing, tk.Frame):
                 node.fractions = [1 - ratio, ratio]
             self._ensure_sashes(node)
         self._layout()
+        self._schedule_measure()
 
     def remove(self, pane):
         """Remove a pane (its widget is kept, just no longer shown); the
@@ -2405,6 +2473,7 @@ class GridPanedwindow(_FrameColorParts, _WidgetPlumbing, tk.Frame):
                 for sash in parent.sashes:
                     sash.destroy()
         self._layout()
+        self._schedule_measure()
 
     forget = remove
 
@@ -2421,6 +2490,34 @@ class GridPanedwindow(_FrameColorParts, _WidgetPlumbing, tk.Frame):
             return
         self._layout_node(self._pane_tree, 0, 0, width, height)
         self._junctions = self._find_junctions()
+
+    def _measure_panes(self):
+        """Nothing to measure: the panes share the space by fractions."""
+
+    def _natural_size(self):
+        """The (width, height) the whole layout needs so that every pane gets at least
+        the size it asks for, or None without panes.
+        """
+        if self._pane_tree is None:
+            return None
+        return self._node_size(self._pane_tree)
+
+    def _node_size(self, node):
+        """The (width, height) a node needs: a leaf what its widget asks for, a split
+        enough for its biggest child at that child's share of the space.
+        """
+        if isinstance(node, _PaneLeaf):
+            return requested_size_of(node.child)
+        horizontal = node.orient == "horizontal"
+        sizes = [self._node_size(child) for child in node.children]
+        axis, cross = (0, 1) if horizontal else (1, 0)
+        along = max(
+            size[axis] / max(fraction, 0.01)
+            for size, fraction in zip(sizes, node.fractions)
+        )
+        along += _Sash.THICKNESS * (len(node.children) - 1)
+        across = max(size[cross] for size in sizes)
+        return (round(along), across) if horizontal else (across, round(along))
 
     def _split_sizes(self, split, length):
         """Pixel sizes of the children of split along a length."""
