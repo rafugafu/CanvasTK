@@ -75,6 +75,7 @@ from .windows import (
 # The file dialogs, message boxes, and color picker, used as
 # canvastk.filedialog.askopenfilename(...) like tkinter's.
 from . import colorchooser, filedialog, messagebox
+from .colorchooser import ColorDisplay
 
 __all__ = [
     "colorchooser",
@@ -93,6 +94,7 @@ __all__ = [
     "CANVAS_WIDGET_THEME",
     "CanvasWidget",
     "Checkbutton",
+    "ColorDisplay",
     "Combobox",
     "Entry",
     "Foldable",

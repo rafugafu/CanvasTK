@@ -15,13 +15,12 @@ gradient images) is in plain functions at the top.
 """
 
 import colorsys
-import math
 import string
 import tkinter as tk
 
 from PIL import Image, ImageDraw, ImageOps, ImageTk
 
-from ._core import CanvasWidget, window_theme, _CANVAS_CHROME_TAG
+from ._core import CanvasWidget, resolve_color, window_theme, _CANVAS_CHROME_TAG
 from .buttons import Button, Label
 from .containers import Frame
 from .entries import Entry, Spinbox
@@ -255,80 +254,124 @@ class _HueSlider(CanvasWidget):
             )
 
 
-class _SwatchGrid(CanvasWidget):
-    """A grid of small color squares; click one to choose it."""
+class ColorDisplay(CanvasWidget):
+    """A small rounded square showing one color, like a swatch of the color picker.
 
-    CELL = 24
+        swatch = ColorDisplay(root, color="#ff8800")
+        swatch.config(color="#3366cc")
+
+    `color` is any tk color ("#rrggbb", a name) or a theme key; `size` is the side in
+    px (or give `width` and `height`), `radius` rounds the corners, and `border_width` is
+    the border's width in px. The border follows the theme (`border_color` overrides
+    it); `highlight` (None, "hover", or "selected") draws a thicker border in the
+    theme's text or accent color.
+    """
+
+    _COLOR_PARTS = ("border_color",)
+    _CUSTOM_OPTIONS = CanvasWidget._CUSTOM_OPTIONS + (
+        "color",
+        "radius",
+        "border_width",
+        "highlight",
+    )
+
+    # The theme color of each highlight.
+    _COLOR_DISPLAY_HIGHLIGHTS = {"hover": "text", "selected": "accent"}
+
+    def __init__(
+        self,
+        master,
+        color="#000000",
+        size=24,
+        radius=6,
+        border_width=1,
+        highlight=None,
+        **kwargs,
+    ):
+        kwargs.setdefault("width", size)
+        kwargs.setdefault("height", size)
+        super().__init__(master, **kwargs)
+        self._color = color
+        self.radius = radius
+        self.border_width = border_width
+        self.highlight = highlight
+        self.schedule_redraw()
+
+    def _apply_options(self, options):
+        """Keep `color` as _color: the name `color` is the base class's method."""
+        if "color" in options:
+            self._color = options.pop("color")
+        super()._apply_options(options)
+
+    def cget(self, key):
+        """tkinter cget(): `color` is the color shown."""
+        return self._color if key == "color" else super().cget(key)
+
+    def redraw(self, width, height):
+        """Draw the square in its color with a thin border."""
+        border, border_width = self.part("border_color", "border"), self.border_width
+        if self.highlight:  # a thicker border in a theme color
+            border = resolve_color(
+                self, self.colors[self._COLOR_DISPLAY_HIGHLIGHTS[self.highlight]]
+            )
+            border_width = max(border_width, 2)
+        self.draw_box(
+            0,
+            0,
+            width,
+            height,
+            resolve_color(self, self.colors.get(self._color, self._color)),
+            border,
+            border_width,
+            self.radius,
+        )
+
+
+class _SwatchGrid(Frame):
+    """A grid of small color squares (ColorDisplay widgets); click one to choose it."""
+
     GAP = 6
 
     def __init__(self, master, colors, columns, on_pick, **kwargs):
         """colors: '#rrggbb' strings, filled row by row into `columns` columns;
         on_pick(color) is called for a click.
         """
-        self.swatch_colors = list(colors)
-        self.columns = columns
+        super().__init__(master, **kwargs)
         self.on_pick = on_pick
         self.current = None
-        self._hover = None
-        rows = max(1, math.ceil(len(self.swatch_colors) / columns))
-        kwargs.setdefault("width", columns * self.CELL + (columns - 1) * self.GAP)
-        kwargs.setdefault("height", rows * self.CELL + (rows - 1) * self.GAP)
-        super().__init__(master, **kwargs)
-        self.configure(cursor="hand2")
-        self.bind("<Motion>", self._on_motion, add="+")
-        self.bind("<Leave>", self._on_leave, add="+")
-        self.bind("<ButtonPress-1>", self._on_press, add="+")
+        self.swatches = []
+        for index, color in enumerate(colors):
+            swatch = ColorDisplay(self, color=color, cursor="hand2")
+            swatch.grid(
+                row=index // columns,
+                column=index % columns,
+                padx=(0, self.GAP if index % columns < columns - 1 else 0),
+                pady=(
+                    0,
+                    self.GAP if index // columns < (len(colors) - 1) // columns else 0,
+                ),
+            )
+            swatch.bind(
+                "<Enter>", lambda _, s=swatch: self._mark(s, hover=True), add="+"
+            )
+            swatch.bind("<Leave>", lambda _, s=swatch: self._mark(s), add="+")
+            swatch.bind("<ButtonPress-1>", lambda _, c=color: self.on_pick(c), add="+")
+            self.swatches.append(swatch)
 
     def set_current(self, color):
         """Mark the swatch that equals this color (if there is one)."""
-        if color != self.current:
-            self.current = color
-            self.schedule_redraw()
+        self.current = color
+        for swatch in self.swatches:
+            self._mark(swatch)
 
-    def _index_at(self, x, y):
-        """The index of the swatch under a point, or None."""
-        step = self.CELL + self.GAP
-        column, row = int(x // step), int(y // step)
-        if x - column * step >= self.CELL or y - row * step >= self.CELL:
-            return None
-        index = row * self.columns + column
-        return (
-            index if column < self.columns and index < len(self.swatch_colors) else None
-        )
-
-    def _on_motion(self, event):
-        """Pointer moved: highlight the swatch under it."""
-        index = self._index_at(event.x, event.y)
-        if index != self._hover:
-            self._hover = index
-            self.schedule_redraw()
-
-    def _on_leave(self, _):
-        """Pointer left: remove the highlight."""
-        if self._hover is not None:
-            self._hover = None
-            self.schedule_redraw()
-
-    def _on_press(self, event):
-        """Click: choose the swatch under the pointer."""
-        index = self._index_at(event.x, event.y)
-        if index is not None:
-            self.on_pick(self.swatch_colors[index])
-
-    def redraw(self, width, height):
-        """Draw the swatches; the current one has an accent ring and the hovered one a
-        text-colored ring.
-        """
-        step = self.CELL + self.GAP
-        for index, color in enumerate(self.swatch_colors):
-            x, y = (index % self.columns) * step, (index // self.columns) * step
-            if index == self._hover:
-                outline, line = self.color("text"), 2
-            elif color.lower() == self.current:
-                outline, line = self.color("accent"), 2
-            else:
-                outline, line = self.color("border"), 1
-            self.draw_box(x, y, x + self.CELL, y + self.CELL, color, outline, line, 6)
+    def _mark(self, swatch, hover=False):
+        """Highlight a swatch while hovered, or if it is the current color."""
+        if hover:
+            swatch.config(highlight="hover")
+        elif swatch.cget("color").lower() == self.current:
+            swatch.config(highlight="selected")
+        else:
+            swatch.config(highlight=None)
 
 
 # =============================================================================

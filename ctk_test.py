@@ -209,12 +209,24 @@ def build_demo():
     Meter(
         meter_row, variable=meter_value, shape="circle", subtext="circle", size=150
     ).pack(side="left", padx=(0, 16))
-    Meter(
-        meter_row, variable=meter_value, shape="semi", subtext="semi", size=170
-    ).pack(side="left", anchor="s")
+    Meter(meter_row, variable=meter_value, shape="semi", subtext="semi", size=170).pack(
+        side="left", anchor="s"
+    )
     Scale(gauges, from_=0, to=100, length=300, variable=meter_value).pack(
         anchor="w", padx=10, pady=4
     )
+    swatch_row = Frame(gauges)
+    swatch_row.pack(fill="x", padx=10, pady=4)
+    swatch = ColorDisplay(swatch_row, color="#ff8800", size=32)
+    swatch.pack(side="left", padx=(0, 8))
+    Button(
+        swatch_row,
+        "Change color",
+        command=lambda: swatch.config(
+            color=colorchooser.askcolor(swatch.cget("color"), parent=gauges)[1]
+            or swatch.cget("color")
+        ),
+    ).pack(side="left")
     details = Foldable(gauges, "Details")
     Label(details, "Everything in here is an ordinary child of the foldable.").pack(
         anchor="w"
@@ -447,9 +459,16 @@ def build_demo():
         dialogs_tab,
         "Same API as tkinter.filedialog, tkinter.messagebox, and tkinter.colorchooser:",
     ).pack(anchor="w", padx=14, pady=(14, 6))
-    text_types = [("Text files", "*.txt"), ("Python files", "*.py *.pyw"), ("All files", "*")]
+    text_types = [
+        ("Text files", "*.txt"),
+        ("Python files", "*.py *.pyw"),
+        ("All files", "*"),
+    ]
     for caption, ask in (
-        ("askopenfilename", lambda: filedialog.askopenfilename(parent=root, filetypes=text_types)),
+        (
+            "askopenfilename",
+            lambda: filedialog.askopenfilename(parent=root, filetypes=text_types),
+        ),
         ("askopenfilenames", lambda: filedialog.askopenfilenames(parent=root)),
         (
             "asksaveasfilename",
@@ -459,22 +478,38 @@ def build_demo():
         ),
         ("askdirectory", lambda: filedialog.askdirectory(parent=root)),
         ("askcolor", lambda: colorchooser.askcolor("#3b82f6", parent=root)),
-        ("showinfo", lambda: messagebox.showinfo("Saved", "The file was saved.", parent=root)),
+        (
+            "showinfo",
+            lambda: messagebox.showinfo("Saved", "The file was saved.", parent=root),
+        ),
         (
             "showwarning",
             lambda: messagebox.showwarning(
-                "Careful", "This cannot be undone.", detail="Make a copy first.", parent=root
+                "Careful",
+                "This cannot be undone.",
+                detail="Make a copy first.",
+                parent=root,
             ),
         ),
-        ("showerror", lambda: messagebox.showerror("Error", "Could not open the file.", parent=root)),
-        ("askyesno", lambda: messagebox.askyesno("Quit", "Quit without saving?", parent=root)),
+        (
+            "showerror",
+            lambda: messagebox.showerror(
+                "Error", "Could not open the file.", parent=root
+            ),
+        ),
+        (
+            "askyesno",
+            lambda: messagebox.askyesno("Quit", "Quit without saving?", parent=root),
+        ),
         (
             "askyesnocancel",
             lambda: messagebox.askyesnocancel("Save", "Save the changes?", parent=root),
         ),
         (
             "askretrycancel",
-            lambda: messagebox.askretrycancel("Network", "The server is not answering.", parent=root),
+            lambda: messagebox.askretrycancel(
+                "Network", "The server is not answering.", parent=root
+            ),
         ),
     ):
         Button(
