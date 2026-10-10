@@ -156,13 +156,11 @@ _GEOMETRY_METHOD_NAMES = (
 )
 
 
-class ScrolledFrame(_ThemedBackground, tk.Frame):
-    """A scrolling frame: add children to the ScrolledFrame itself; pack/grid/
-    place act on the whole scrolling container.
-
-    orient: 'vertical' (default), 'horizontal' or 'both'. The mouse wheel
-    scrolls vertically (horizontally for orient='horizontal'); Shift+wheel
-    always scrolls horizontally."""
+class _ScrolledContent:
+    """The scrolling shared by ScrolledFrame and a scrolled Foldable: a viewport canvas
+    (with scroll bars) inside a container, showing the content frame through a canvas
+    window. The class using it is the content frame.
+    """
 
     _SCROLLBAR_COLOR_OPTIONS = {
         "scrollbar_track_color": "track_color",
@@ -170,46 +168,37 @@ class ScrolledFrame(_ThemedBackground, tk.Frame):
         "scrollbar_thumb_hover_color": "thumb_hover_color",
     }
 
-    def __init__(self, master, orient="vertical", autohide=True, theme=None, **kwargs):
-        """Create the scrolled frame.
-
-        orient: which directions scroll. autohide: scroll bars hide when not needed.
-        theme / bg / scrollbar_*_color: styling. The returned object is the *content*
-        frame; its geometry methods are redirected to the outer container.
+    @classmethod
+    def _pop_scrollbar_theme(cls, kwargs, theme):
+        """Take the scrollbar_*_color options out of kwargs; with `theme`, the theme the
+        scroll bars get.
         """
-        if orient not in ("vertical", "horizontal", "both"):
-            raise ValueError("orient must be 'vertical', 'horizontal' or 'both'")
-        self.orient = orient
-        self._scrolls_vertically = orient in ("vertical", "both")
-        self._scrolls_horizontally = orient in ("horizontal", "both")
         scrollbar_theme = {
             own_name: kwargs.pop(name)
-            for name, own_name in self._SCROLLBAR_COLOR_OPTIONS.items()
+            for name, own_name in cls._SCROLLBAR_COLOR_OPTIONS.items()
             if name in kwargs
         }
-        scrollbar_theme = {**(theme or {}), **scrollbar_theme}
-        background = kwargs.pop("bg", kwargs.pop("background", None))
-        self._init_background(
-            master, background, kwargs.pop("background_role", None), theme
-        )
-        # Structure: outer frame > viewport canvas (+ scroll bars) > this content frame,
-        # shown through a canvas window.
-        self.outer = Frame(
-            master, background_role=self.background_role, bg=background, theme=theme
-        )
-        self.viewport = tk.Canvas(
-            self.outer,
-            bd=0,
-            highlightthickness=0,
-            bg=self.initial_background(master, background),
-        )
-        self.outer.grid_rowconfigure(0, weight=1)
-        self.outer.grid_columnconfigure(0, weight=1)
+        return {**(theme or {}), **scrollbar_theme}
+
+    def _build_viewport(
+        self, area, orient, autohide, scrollbar_theme, background, max_height=None
+    ):
+        """Create the viewport and the scroll bars in the container `area`. With
+        `max_height`, the viewport asks for the height of the contents up to that many
+        px (more scrolls); without it, it keeps the canvas's own size.
+        """
+        self._scroll_area = area
+        self._max_viewport_height = max_height
+        self._scrolls_vertically = orient in ("vertical", "both")
+        self._scrolls_horizontally = orient in ("horizontal", "both")
+        self.viewport = tk.Canvas(area, bd=0, highlightthickness=0, bg=background)
+        area.grid_rowconfigure(0, weight=1)
+        area.grid_columnconfigure(0, weight=1)
         self.viewport.grid(row=0, column=0, sticky="nsew")
         self.vertical_scrollbar = self.horizontal_scrollbar = None
         if self._scrolls_vertically:
             self.vertical_scrollbar = Scrollbar(
-                self.outer,
+                area,
                 orient="vertical",
                 command=self.viewport.yview,
                 autohide=autohide,
@@ -219,7 +208,7 @@ class ScrolledFrame(_ThemedBackground, tk.Frame):
             self.viewport.configure(yscrollcommand=self.vertical_scrollbar.set)
         if self._scrolls_horizontally:
             self.horizontal_scrollbar = Scrollbar(
-                self.outer,
+                area,
                 orient="horizontal",
                 command=self.viewport.xview,
                 autohide=autohide,
@@ -228,19 +217,12 @@ class ScrolledFrame(_ThemedBackground, tk.Frame):
             self.horizontal_scrollbar.grid(row=1, column=0, sticky="ew", pady=(2, 0))
             self.viewport.configure(xscrollcommand=self.horizontal_scrollbar.set)
         self.scrollbar = self.vertical_scrollbar or self.horizontal_scrollbar
-        kwargs.setdefault("bd", 0)
-        kwargs.setdefault("highlightthickness", 0)
-        tk.Frame.__init__(
-            self,
-            self.viewport,
-            bg=self.initial_background(master, background),
-            **kwargs,
-        )
-        _CANVAS_THEMED_WIDGETS.add(self)
+
+    def _attach_content(self):
+        """Show this frame in the viewport and start following sizes and the wheel
+        (call after the frame is created, as a child of the viewport).
+        """
         self._window = self.viewport.create_window(0, 0, window=self, anchor="nw")
-        self._destroying = False
-        for name in _GEOMETRY_METHOD_NAMES:
-            setattr(self, name, getattr(self.outer, name))
         tk.Frame.bind(self, "<Configure>", lambda _: self._fit_content(), add="+")
         self.viewport.bind("<Configure>", lambda _: self._fit_content(), add="+")
         top = self.winfo_toplevel()
@@ -252,15 +234,15 @@ class ScrolledFrame(_ThemedBackground, tk.Frame):
         ]
         self._top = top
 
-    def refresh_theme(self):
-        """The theme changed: recolor the content frame and the viewport."""
-        self.apply_background()
+    def _refresh_viewport(self):
+        """The theme changed: recolor the viewport like the content frame."""
         if self.background_role:
             self.viewport.configure(bg=self.themed_color(self, self.background_role))
 
     def _fit_content(self):
         """Size the content window: it fills the viewport along axes that do
-        not scroll and is at least its natural size along axes that do."""
+        not scroll and is at least its natural size along axes that do.
+        """
         view_width = self.viewport.winfo_width()
         view_height = self.viewport.winfo_height()
         width = view_width
@@ -271,6 +253,11 @@ class ScrolledFrame(_ThemedBackground, tk.Frame):
             height = max(self.winfo_reqheight(), view_height)
         self.viewport.itemconfigure(self._window, width=width, height=height)
         self.viewport.configure(scrollregion=(0, 0, width, height))
+        if self._max_viewport_height is not None:
+            self.viewport.configure(
+                width=self.winfo_reqwidth(),
+                height=min(self.winfo_reqheight(), self._max_viewport_height),
+            )
 
     def _on_wheel(self, event):
         """Mouse wheel anywhere in the window: scroll if the pointer is over this frame.
@@ -283,7 +270,7 @@ class ScrolledFrame(_ThemedBackground, tk.Frame):
         except (KeyError, tk.TclError):
             return
         widget = target
-        while widget is not None and widget is not self.outer:
+        while widget is not None and widget is not self._scroll_area:
             if getattr(widget, "handles_wheel", False) or widget.winfo_class() in (
                 "Text",
                 "Listbox",
@@ -304,6 +291,69 @@ class ScrolledFrame(_ThemedBackground, tk.Frame):
             if self.winfo_reqheight() > self.viewport.winfo_height():
                 self.viewport.yview_scroll(direction, "units")
 
+    def _remove_wheel_bindings(self):
+        """Stop listening to the wheel of the window."""
+        for sequence, funcid in self._wheel_bindings:
+            try:
+                self._top.unbind(sequence, funcid)
+            except tk.TclError:
+                pass
+
+
+class ScrolledFrame(_ScrolledContent, _ThemedBackground, tk.Frame):
+    """A scrolling frame: add children to the ScrolledFrame itself; pack/grid/
+    place act on the whole scrolling container.
+
+    orient: 'vertical' (default), 'horizontal' or 'both'. The mouse wheel
+    scrolls vertically (horizontally for orient='horizontal'); Shift+wheel
+    always scrolls horizontally."""
+
+    def __init__(self, master, orient="vertical", autohide=True, theme=None, **kwargs):
+        """Create the scrolled frame.
+
+        orient: which directions scroll. autohide: scroll bars hide when not needed.
+        theme / bg / scrollbar_*_color: styling. The returned object is the *content*
+        frame; its geometry methods are redirected to the outer container.
+        """
+        if orient not in ("vertical", "horizontal", "both"):
+            raise ValueError("orient must be 'vertical', 'horizontal' or 'both'")
+        self.orient = orient
+        scrollbar_theme = self._pop_scrollbar_theme(kwargs, theme)
+        background = kwargs.pop("bg", kwargs.pop("background", None))
+        self._init_background(
+            master, background, kwargs.pop("background_role", None), theme
+        )
+        # Structure: outer frame > viewport canvas (+ scroll bars) > this content frame,
+        # shown through a canvas window.
+        self.outer = Frame(
+            master, background_role=self.background_role, bg=background, theme=theme
+        )
+        self._build_viewport(
+            self.outer,
+            orient,
+            autohide,
+            scrollbar_theme,
+            self.initial_background(master, background),
+        )
+        kwargs.setdefault("bd", 0)
+        kwargs.setdefault("highlightthickness", 0)
+        tk.Frame.__init__(
+            self,
+            self.viewport,
+            bg=self.initial_background(master, background),
+            **kwargs,
+        )
+        _CANVAS_THEMED_WIDGETS.add(self)
+        self._destroying = False
+        for name in _GEOMETRY_METHOD_NAMES:
+            setattr(self, name, getattr(self.outer, name))
+        self._attach_content()
+
+    def refresh_theme(self):
+        """The theme changed: recolor the content frame and the viewport."""
+        self.apply_background()
+        self._refresh_viewport()
+
     def destroy(self):
         """Remove the wheel bindings and destroy the whole container (the content frame
         is destroyed with it).
@@ -315,11 +365,7 @@ class ScrolledFrame(_ThemedBackground, tk.Frame):
             tk.Frame.destroy(self)
             return
         self._destroying = True
-        for sequence, funcid in self._wheel_bindings:
-            try:
-                self._top.unbind(sequence, funcid)
-            except tk.TclError:
-                pass
+        self._remove_wheel_bindings()
         self.outer.destroy()
 
 
@@ -394,7 +440,7 @@ class _FoldableHeader(CanvasWidget):
         )
 
 
-class Foldable(_ThemedBackground, tk.Frame):
+class Foldable(_ScrolledContent, _ThemedBackground, tk.Frame):
     """A frame that can be folded away: a header bar with an arrow and a title, and the
     contents under it.
 
@@ -405,6 +451,9 @@ class Foldable(_ThemedBackground, tk.Frame):
     puts anything into the parent or moves the parent's other widgets around except
     for the space the Foldable itself takes. Click the header, or press Space or Return
     on it, to fold or unfold; expand(), collapse(), and toggle() do it from code.
+
+    With scrolled=True the contents scroll when they are taller than max_height; the
+    children are still added to the Foldable itself.
     """
 
     _HEADER_COLOR_PARTS = _FoldableHeader._COLOR_PARTS
@@ -416,6 +465,8 @@ class Foldable(_ThemedBackground, tk.Frame):
         expanded=True,
         command=None,
         padding=8,
+        scrolled=False,
+        max_height=300,
         theme=None,
         **kwargs,
     ):
@@ -423,19 +474,24 @@ class Foldable(_ThemedBackground, tk.Frame):
 
         text: the title. expanded: whether the contents start open. command(expanded):
         called after every fold or unfold. padding: the space in px around the
-        contents. The header takes the color options fill_color, hover_color,
-        text_color, arrow_color, and focus_color; theme / bg style the contents.
+        contents. scrolled: scroll the contents (with a scroll bar that shows when
+        needed) instead of growing with them; max_height: the height in px the open
+        contents take at most when scrolled. The header takes the color options
+        fill_color, hover_color, text_color, arrow_color, and focus_color; theme / bg
+        / scrollbar_*_color style the contents.
         """
         header_theme = {
             **(theme or {}),
             **pop_color_parts(self._HEADER_COLOR_PARTS, kwargs),
         }
+        scrollbar_theme = self._pop_scrollbar_theme(kwargs, theme)
         background = kwargs.pop("bg", kwargs.pop("background", None))
         self._init_background(
             master, background, kwargs.pop("background_role", None), theme
         )
-        # Structure: outer frame > header bar + this content frame. The outer frame is
-        # the one thing the parent sees.
+        # Structure: outer frame > header bar + this content frame (or, when scrolled,
+        # a body holding a viewport that shows it). The outer frame is the one thing
+        # the parent sees.
         self.outer = Frame(
             master, background_role=self.background_role, bg=background, theme=theme
         )
@@ -443,15 +499,36 @@ class Foldable(_ThemedBackground, tk.Frame):
         self.outer.grid_rowconfigure(1, weight=1)
         self.header = _FoldableHeader(self.outer, self, text, theme=header_theme)
         self.header.grid(row=0, column=0, sticky="ew")
+        self.scrolled = scrolled
+        self._holder = self  # what is shown or hidden when folding
+        content_master = self.outer
+        if scrolled:
+            self._holder = Frame(
+                self.outer,
+                background_role=self.background_role,
+                bg=background,
+                theme=theme,
+            )
+            self._build_viewport(
+                self._holder,
+                "vertical",
+                True,
+                scrollbar_theme,
+                self.initial_background(master, background),
+                max_height,
+            )
+            content_master = self.viewport
         kwargs.setdefault("bd", 0)
         kwargs.setdefault("highlightthickness", 0)
         tk.Frame.__init__(
             self,
-            self.outer,
+            content_master,
             bg=self.initial_background(master, background),
             **kwargs,
         )
         _CANVAS_THEMED_WIDGETS.add(self)
+        if scrolled:
+            self._attach_content()
         self.padding = padding
         self.command = command
         self._expanded = False
@@ -464,6 +541,8 @@ class Foldable(_ThemedBackground, tk.Frame):
     def refresh_theme(self):
         """The theme changed: re-apply the background."""
         self.apply_background()
+        if self.scrolled:
+            self._refresh_viewport()
 
     @property
     def text(self):
@@ -503,10 +582,15 @@ class Foldable(_ThemedBackground, tk.Frame):
         if expanded:
             pad = self.padding
             tk.Frame.grid(
-                self, row=1, column=0, sticky="nsew", padx=pad, pady=(pad, pad)
+                self._holder,
+                row=1,
+                column=0,
+                sticky="nsew",
+                padx=pad,
+                pady=(pad, pad),
             )
         else:
-            tk.Frame.grid_remove(self)
+            tk.Frame.grid_remove(self._holder)
         self.header.schedule_redraw()
         if notify:
             self.event_generate("<<FoldableToggled>>")
@@ -521,6 +605,8 @@ class Foldable(_ThemedBackground, tk.Frame):
             tk.Frame.destroy(self)
             return
         self._destroying = True
+        if self.scrolled:
+            self._remove_wheel_bindings()
         self.outer.destroy()
 
 

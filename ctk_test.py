@@ -236,6 +236,10 @@ def build_demo():
     Label(more, "A foldable inside a foldable.").pack(anchor="w")
     more.pack(fill="x", pady=(6, 0))
     details.pack(fill="x", padx=10, pady=(10, 4))
+    long_fold = Foldable(gauges, "Scrolled contents", scrolled=True, max_height=90)
+    for number in range(12):
+        Label(long_fold, f"Line {number + 1}").pack(anchor="w")
+    long_fold.pack(fill="x", padx=10, pady=4)
     surprise = Foldable(gauges, "Folded at the start", expanded=False)
     Label(surprise, "Surprise!").pack(anchor="w")
     surprise.pack(fill="x", padx=10, pady=4)
