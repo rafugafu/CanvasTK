@@ -25,6 +25,8 @@ class _ThemedWindow(_ThemedBackground):
     _ThemedBackground).
     """
 
+    _is_window = True  # the search for the containers around a widget stops here
+
     def _init_window(self, background, theme, appearance_mode=None):
         """background: a fixed color (bg=), or None to follow the theme.
         theme: theme-key overrides for this window and every widget in it.
@@ -32,7 +34,7 @@ class _ThemedWindow(_ThemedBackground):
         global mode)."""
         self._appearance_mode = check_appearance_mode(appearance_mode)
         self._explicit_background = background
-        # The window's own theme: widgets inside look it up through window_theme(),
+        # The window's own theme: widgets inside look it up (see layered_theme),
         # between the global theme and their own overrides.
         self._theme_overrides = starting_theme(theme)
         self.background_role = None if background else "window"
@@ -43,41 +45,6 @@ class _ThemedWindow(_ThemedBackground):
     def refresh_theme(self):
         """The theme changed: re-apply the window's background."""
         self.apply_background()
-
-    def _appearance_changed(self):
-        """The window's appearance mode changed: recolor it and everything in it."""
-        self.refresh_theme()
-        self._refresh_window_widgets()
-
-    def _refresh_window_widgets(self):
-        """Make every themed widget that lives in this window re-read the theme (after
-        the window's theme changed).
-        """
-        for widget in list(_CANVAS_THEMED_WIDGETS):
-            try:
-                if widget is not self and widget.winfo_toplevel() is self:
-                    widget.refresh_theme()
-            except tk.TclError:
-                pass
-
-    def set_theme(self, theme):
-        """Change theme keys for this window and every widget inside it,
-        dynamically (all colors, not just the accent); None removes a change.
-        A widget's own colors still win. Giving an 'accent' also derives
-        accent_hover, accent_text, focus_ring, selection, and row_current."""
-        for key, value in theme.items():
-            if value is None:
-                self._theme_overrides.pop(key, None)
-            else:
-                self._theme_overrides[key] = value
-        self.refresh_theme()
-        self._refresh_window_widgets()
-
-    def reset_theme(self):
-        """Remove every change made with set_theme() or theme=."""
-        self._theme_overrides.clear()
-        self.refresh_theme()
-        self._refresh_window_widgets()
 
 
 class Window(_ThemedWindow, tk.Tk):

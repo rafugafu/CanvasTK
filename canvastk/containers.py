@@ -11,10 +11,10 @@ from ._core import (
     pop_color_parts,
     check_appearance_mode,
     cross_image,
-    get_appearance_mode,
+    effective_appearance_mode,
     layered_theme,
+    refresh_theme_inside,
     starting_theme,
-    window_appearance_mode,
     CanvasWidget,
     _CANVAS_CHROME_TAG,
     _CANVAS_THEMED_WIDGETS,
@@ -51,7 +51,8 @@ class _ThemedBackground:
     comes from its master (a Notebook page is 'surface', a Window is
     'window'); containers inside foreign widgets keep a fixed measured color."""
 
-    _appearance_mode = None  # 'light' / 'dark' for this container alone, else follows
+    _appearance_mode = None  # 'light' / 'dark' for this container and its contents
+    _is_theme_scope = True  # its theme and mode apply to everything inside it
 
     def child_background_color(self):
         """A fixed color this container gives its children (or None)."""
@@ -72,8 +73,8 @@ class _ThemedBackground:
         self.child_background_role = self.background_role
 
     def themed_color(self, widget, key):
-        """Theme color for key: global theme, then the window's, then this
-        container's own overrides."""
+        """Theme color for key: the global theme, then the containers around it (the
+        window, frames), then this container's own overrides."""
         colors = layered_theme(widget, self._appearance_mode, self._theme_overrides)
         return resolve_color(widget, colors[key])
 
@@ -87,59 +88,84 @@ class _ThemedBackground:
             return self.themed_color(master, self.background_role)
         return parent_background(master)
 
+    def _make_part(self, master, background):
+        """A frame that is a part of this container (the outer frame that holds the
+        container's header, scroll bars...): it shares the container's theme and
+        appearance mode.
+        """
+        part = Frame(master, background_role=self.background_role, bg=background)
+        part._scope_owner = self
+        part._theme_overrides = self._theme_overrides
+        part.apply_background()
+        return part
+
     def apply_background(self):
         """Set the Tk background from the current theme (when it follows a role)."""
         if self.background_role:
             self.configure(bg=self.themed_color(self, self.background_role))
 
     def set_theme(self, theme):
-        """Change theme keys for this container (its background follows
-        them), dynamically; None removes a change. Children keep their own
-        themes; use Window.set_theme to recolor a whole window."""
+        """Change theme keys for this container and every widget inside it,
+        dynamically (all colors, not just the accent); None removes a change. A
+        widget's own colors, and the themes of containers inside this one, still win.
+        Giving an 'accent' also derives accent_hover, accent_text, focus_ring,
+        selection, and row_current."""
         for key, value in theme.items():
             if value is None:
                 self._theme_overrides.pop(key, None)
             else:
                 self._theme_overrides[key] = value
+        self._refresh_scope()
+
+    def _scope_root(self):
+        """The widget that holds this container and, for a container made of several
+        widgets, the rest of them (its header, scroll bars...).
+        """
+        return getattr(self, "outer", self)
+
+    def _refresh_scope(self):
+        """Recolor this container and everything inside it (after its theme or its
+        appearance mode changed). Containers come before what they hold.
+        """
         self.refresh_theme()
+        refresh_theme_inside(self._scope_root(), skip=self)
 
     def get_theme(self):
         """This container's effective theme (theme key -> color)."""
         return layered_theme(self, self._appearance_mode, self._theme_overrides)
 
     def set_appearance_mode(self, mode):
-        """'light' or 'dark' for this container's own background; None follows its
-        window (or the global mode).
+        """'light' or 'dark' for this container and everything inside it; None follows
+        the container around it (or the global mode).
         """
         self._appearance_mode = check_appearance_mode(mode)
-        self._appearance_changed()
+        self._refresh_scope()
 
     def get_appearance_mode(self):
         """The appearance mode this container uses, 'light' or 'dark'."""
-        return (
-            self._appearance_mode
-            or window_appearance_mode(self)
-            or get_appearance_mode()
-        )
-
-    def _appearance_changed(self):
-        """The appearance mode of this container changed: recolor it."""
-        self.refresh_theme()
+        return effective_appearance_mode(self, self._appearance_mode)
 
     def reset_theme(self):
         """Remove every theme change made on this container."""
         self._theme_overrides.clear()
-        self.refresh_theme()
+        self._refresh_scope()
 
 
 class Frame(_ThemedBackground, tk.Frame):
-    """A tk.Frame that follows its parent's themed background."""
+    """A tk.Frame that follows its parent's themed background. Its theme and appearance
+    mode (theme=, set_theme(), appearance_mode=, set_appearance_mode()) apply to the
+    frame and to everything inside it.
+    """
 
-    def __init__(self, master, background_role=None, theme=None, **kwargs):
+    def __init__(
+        self, master, background_role=None, theme=None, appearance_mode=None, **kwargs
+    ):
         """Create the frame; bg= fixes the color, background_role= picks a theme role,
-        theme= overrides theme keys for it.
+        theme= overrides theme keys, and appearance_mode= ('light' or 'dark') sets the
+        mode, for the frame and everything inside it.
         """
         background = kwargs.pop("bg", kwargs.pop("background", None))
+        self._appearance_mode = check_appearance_mode(appearance_mode)
         self._init_background(master, background, background_role, theme)
         kwargs.setdefault("bd", 0)
         kwargs.setdefault("highlightthickness", 0)
@@ -446,9 +472,7 @@ class ScrolledFrame(_ScrolledContent, _ThemedBackground, tk.Frame):
         )
         # Structure: outer frame > viewport canvas (+ scroll bars) > this content frame,
         # shown through a canvas window.
-        self.outer = Frame(
-            master, background_role=self.background_role, bg=background, theme=theme
-        )
+        self.outer = self._make_part(master, background)
         self._build_viewport(
             self.outer,
             orient,
@@ -660,9 +684,7 @@ class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         # Structure: outer frame > header bar + this content frame (or, when scrolled,
         # a body holding a viewport that shows it). The outer frame is the one thing
         # the parent sees.
-        self.outer = Frame(
-            master, background_role=self.background_role, bg=background, theme=theme
-        )
+        self.outer = self._make_part(master, background)
         self.outer.grid_columnconfigure(0, weight=1)
         self.outer.grid_rowconfigure(1, weight=1)
         self._check_orient(orient)
@@ -676,12 +698,7 @@ class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         self._holder = self  # what is shown or hidden when folding
         content_master = self.outer
         if scrolled:
-            self._holder = Frame(
-                self.outer,
-                background_role=self.background_role,
-                bg=background,
-                theme=theme,
-            )
+            self._holder = self._make_part(self.outer, background)
             self._build_viewport(
                 self._holder,
                 orient,
@@ -917,9 +934,7 @@ class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         )
         # Structure: outer frame > outline canvas, with this content frame on top of it
         # in the same cell. The outer frame is the one thing the parent sees.
-        self.outer = Frame(
-            master, background_role=self.background_role, bg=background, theme=theme
-        )
+        self.outer = self._make_part(master, background)
         self.outer.grid_columnconfigure(0, weight=1)
         self.outer.grid_rowconfigure(0, weight=1)
         self.border = _LabelFrameBorder(
@@ -930,12 +945,7 @@ class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         self._holder = self  # what is placed inside the outline
         content_master = self.outer
         if scrolled:
-            self._holder = Frame(
-                self.outer,
-                background_role=self.background_role,
-                bg=background,
-                theme=theme,
-            )
+            self._holder = self._make_part(self.outer, background)
             self._build_viewport(
                 self._holder,
                 orient,
@@ -1003,9 +1013,30 @@ class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
 
 class _FrameColorParts:
     """configure()/cget() support for a tk.Frame-based widget's _COLOR_PARTS
-    and _SETTABLE_OPTIONS (plain attributes applied by apply_settable_options)."""
+    and _SETTABLE_OPTIONS (plain attributes applied by apply_settable_options). Such a
+    widget (Notebook, Panedwindow, GridPanedwindow) is also a container whose theme and
+    appearance mode apply to everything inside it.
+    """
 
     _SETTABLE_OPTIONS = ()
+    _is_theme_scope = True
+
+    def set_theme(self, theme):
+        """Change theme keys for this widget and everything inside it."""
+        super().set_theme(theme)
+        refresh_theme_inside(self, skip=self)
+
+    def reset_theme(self):
+        """Remove every theme change made on this widget."""
+        super().reset_theme()
+        refresh_theme_inside(self, skip=self)
+
+    def set_appearance_mode(self, mode):
+        """'light' or 'dark' for this widget and everything inside it; None follows the
+        container around it (or the global mode).
+        """
+        super().set_appearance_mode(mode)
+        refresh_theme_inside(self, skip=self)
 
     def apply_settable_options(self, options):
         """Store changed plain options (subclasses extend this to re-layout)."""

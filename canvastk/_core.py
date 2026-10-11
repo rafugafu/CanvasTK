@@ -299,19 +299,73 @@ def window_appearance_mode(widget):
         return None
 
 
-def layered_theme(widget, own_mode, own_overrides):
-    """The effective theme of something in `widget`'s window: the whole theme of the
-    appearance mode that applies (its own `own_mode`, else the window's, else the
-    global one), then the window's theme, then its own `own_overrides`.
+def theme_scopes(widget):
+    """The containers (frames and windows) that hold `widget`, the outermost first: the
+    ones whose theme and appearance mode apply to everything inside them. The search
+    stops at the window, so a Toplevel does not inherit from the window it belongs to.
     """
-    mode = own_mode or window_appearance_mode(widget) or _CANVAS_APPEARANCE_MODE
+    scopes = []
+    current = widget
+    while current is not None:
+        if getattr(current, "_is_theme_scope", False):
+            # The outer frame of a composite container stands for the container.
+            scope = getattr(current, "_scope_owner", current)
+            if not any(scope is other for other in scopes):
+                scopes.append(scope)
+        if getattr(current, "_is_window", False):
+            break
+        current = getattr(current, "master", None)
+    scopes.reverse()
+    return scopes
+
+
+def refresh_theme_inside(root, skip=None):
+    """Make every themed widget inside the container `root` (not in other windows)
+    re-read its theme, the containers before what they hold. `skip` is left out.
+    """
+    inside = []
+    for widget in list(_CANVAS_THEMED_WIDGETS):
+        current = widget
+        while current is not None and current is not root:
+            if getattr(current, "_is_window", False):
+                current = None
+                break
+            current = getattr(current, "master", None)
+        if current is root and widget is not skip:
+            inside.append(widget)
+    for widget in sorted(inside, key=lambda widget: str(widget).count(".")):
+        try:
+            widget.refresh_theme()
+        except tk.TclError:
+            pass
+
+
+def effective_appearance_mode(widget, own_mode=None):
+    """The appearance mode that applies to `widget`: its own `own_mode`, else the one of
+    the innermost container around it that has one, else the global mode.
+    """
+    if own_mode:
+        return own_mode
+    for scope in reversed(theme_scopes(widget)):
+        if scope._appearance_mode:
+            return scope._appearance_mode
+    return _CANVAS_APPEARANCE_MODE
+
+
+def layered_theme(widget, own_mode, own_overrides):
+    """The effective theme of something inside `widget`'s containers: the whole theme of
+    the appearance mode that applies (see effective_appearance_mode), then the themes
+    of the containers around it, outermost first, then its own `own_overrides`.
+    """
+    scopes = theme_scopes(widget)
+    mode = effective_appearance_mode(widget, own_mode)
     theme = dict(
         CANVAS_WIDGET_THEME
         if mode == _CANVAS_APPEARANCE_MODE
         else _theme_for_mode(mode)
     )
     # The keys that follow from an accent are worked out here, for this mode.
-    for layer in (window_theme(widget), own_overrides):
+    for layer in [scope._theme_overrides for scope in scopes] + [own_overrides]:
         theme.update(expand_theme(layer, theme, mode == "dark"))
     return theme
 
@@ -623,11 +677,7 @@ class _WidgetPlumbing:
 
     def get_appearance_mode(self):
         """The appearance mode this widget uses, 'light' or 'dark'."""
-        return (
-            self._appearance_mode
-            or window_appearance_mode(self)
-            or _CANVAS_APPEARANCE_MODE
-        )
+        return effective_appearance_mode(self, self._appearance_mode)
 
     def _init_plumbing(self, theme):
         """Set up theme state, the pending-call set, and the watched-variable slot.
