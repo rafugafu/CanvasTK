@@ -1497,6 +1497,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         for record in self._tab_records:
             if record["child"] is self._selected:
                 record["child"].place(
+                    in_=self,
                     x=pad,
                     y=self._content_top() + pad,
                     relwidth=1,
@@ -2435,9 +2436,13 @@ class Panedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame):
         for index, record in enumerate(self._panes):
             size = round(record["size"])
             if horizontal:
-                record["child"].place(x=position, y=0, width=size, relheight=1)
+                record["child"].place(
+                    in_=self, x=position, y=0, width=size, relheight=1
+                )
             else:
-                record["child"].place(x=0, y=position, height=size, relwidth=1)
+                record["child"].place(
+                    in_=self, x=0, y=position, height=size, relwidth=1
+                )
             position += size
             if index < len(self._sashes):
                 sash = self._sashes[index]
@@ -2737,7 +2742,7 @@ class GridPanedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Fram
         rectangle among its children and puts sashes between them.
         """
         if isinstance(node, _PaneLeaf):
-            node.child.place(x=x, y=y, width=width, height=height)
+            node.child.place(in_=self, x=x, y=y, width=width, height=height)
             return
         node.rect = (x, y, width, height)
         horizontal = node.orient == "horizontal"
