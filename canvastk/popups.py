@@ -12,7 +12,6 @@ import tkinter.font as tkfont
 
 from ._core import (
     CanvasWidget,
-    expand_theme,
     layered_theme,
     starting_theme,
     _CANVAS_CHROME_TAG,
@@ -942,7 +941,7 @@ class Menu:
     def set_theme(self, theme):
         """Change theme keys for this menu only, dynamically (it takes effect
         the next time it is shown); None removes a change."""
-        for key, value in expand_theme(theme, self.colors).items():
+        for key, value in theme.items():
             if value is None:
                 self._theme_overrides.pop(key, None)
             else:

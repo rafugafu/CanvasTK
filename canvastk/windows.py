@@ -9,7 +9,6 @@ import tkinter as tk
 from ._core import (
     _CANVAS_THEMED_WIDGETS,
     check_appearance_mode,
-    expand_theme,
     starting_theme,
 )
 from .containers import (
@@ -66,7 +65,7 @@ class _ThemedWindow(_ThemedBackground):
         dynamically (all colors, not just the accent); None removes a change.
         A widget's own colors still win. Giving an 'accent' also derives
         accent_hover, accent_text, focus_ring, selection, and row_current."""
-        for key, value in expand_theme(theme, self.get_theme()).items():
+        for key, value in theme.items():
             if value is None:
                 self._theme_overrides.pop(key, None)
             else:

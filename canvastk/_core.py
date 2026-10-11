@@ -150,29 +150,35 @@ def _derive_accent_keys(accent, hover, surface, dark):
     )
 
 
-def expand_theme(theme, base=None):
+def expand_theme(theme, base=None, dark=None):
     """theme (a dict of theme keys) plus, if it has an 'accent', every key
     that follows from it (accent_hover, accent_text, focus_ring, selection,
-    row_current...) unless the dict gives that key itself."""
+    row_current...) unless the dict gives that key itself. `base` is the theme
+    underneath it (for its surface color), and `dark` says whether the keys are for
+    the dark mode (by default the current appearance mode)."""
     expanded = dict(theme)
     if theme.get("accent"):
         base = base or CANVAS_WIDGET_THEME
+        if dark is None:
+            dark = _CANVAS_APPEARANCE_MODE == "dark"
         derived = _derive_accent_keys(
             theme["accent"],
             theme.get("accent_hover"),
             theme.get("surface") or base["surface"],
-            _CANVAS_APPEARANCE_MODE == "dark",
+            dark,
         )
         for key, value in derived.items():
             expanded.setdefault(key, value)
     return expanded
 
 
-def starting_theme(theme, base=None):
-    """expand_theme(theme, base) without the keys whose value is None: for a theme
-    given when a widget or window is created, None means "use the default".
+def starting_theme(theme):
+    """theme without the keys whose value is None: for a theme given when a widget or
+    window is created, None means "use the default". The keys that follow from an
+    'accent' are not added here but when the theme is used (see layered_theme), so
+    they follow the appearance mode.
     """
-    return {k: v for k, v in expand_theme(theme or {}, base).items() if v is not None}
+    return {k: v for k, v in (theme or {}).items() if v is not None}
 
 
 def _theme_for_mode(mode):
@@ -192,7 +198,7 @@ def _theme_for_mode(mode):
             dark,
         )
     )
-    theme.update(expand_theme(_CANVAS_USER_THEME, theme))
+    theme.update(expand_theme(_CANVAS_USER_THEME, theme, dark))
     return theme
 
 
@@ -298,13 +304,16 @@ def layered_theme(widget, own_mode, own_overrides):
     appearance mode that applies (its own `own_mode`, else the window's, else the
     global one), then the window's theme, then its own `own_overrides`.
     """
-    mode = own_mode or window_appearance_mode(widget)
-    base = (
+    mode = own_mode or window_appearance_mode(widget) or _CANVAS_APPEARANCE_MODE
+    theme = dict(
         CANVAS_WIDGET_THEME
-        if mode is None or mode == _CANVAS_APPEARANCE_MODE
+        if mode == _CANVAS_APPEARANCE_MODE
         else _theme_for_mode(mode)
     )
-    return {**base, **window_theme(widget), **own_overrides}
+    # The keys that follow from an accent are worked out here, for this mode.
+    for layer in (window_theme(widget), own_overrides):
+        theme.update(expand_theme(layer, theme, mode == "dark"))
+    return theme
 
 
 _rebuild_canvas_widget_theme()
@@ -627,9 +636,7 @@ class _WidgetPlumbing:
         theme). `theme` is this widget's own theme-key / color-part overrides.
         """
         # An 'accent' in the theme also derives accent_hover, accent_text...
-        self._theme_overrides = starting_theme(
-            theme, layered_theme(self, self._appearance_mode, {})
-        )
+        self._theme_overrides = starting_theme(theme)
         self.colors = self._merged_colors()
         _CANVAS_THEMED_WIDGETS.add(self)
         self._pending_calls = set()
@@ -644,7 +651,7 @@ class _WidgetPlumbing:
     def set_theme(self, theme):
         """Change theme keys (or color options) for this widget only,
         dynamically; None removes a change. See set_theme() for 'accent'."""
-        for key, value in expand_theme(theme, self.colors).items():
+        for key, value in theme.items():
             if value is None:
                 self._theme_overrides.pop(key, None)
             else:

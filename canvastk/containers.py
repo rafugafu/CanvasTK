@@ -11,7 +11,6 @@ from ._core import (
     pop_color_parts,
     check_appearance_mode,
     cross_image,
-    expand_theme,
     get_appearance_mode,
     layered_theme,
     starting_theme,
@@ -97,7 +96,7 @@ class _ThemedBackground:
         """Change theme keys for this container (its background follows
         them), dynamically; None removes a change. Children keep their own
         themes; use Window.set_theme to recolor a whole window."""
-        for key, value in expand_theme(theme).items():
+        for key, value in theme.items():
             if value is None:
                 self._theme_overrides.pop(key, None)
             else:

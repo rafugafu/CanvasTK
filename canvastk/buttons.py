@@ -81,8 +81,8 @@ class Button(CanvasWidget):
         default_bg, hover_bg, press_bg, default_fg, hover_fg, press_fg, disabled_bg,
         disabled_fg, border_color: colors (None = from the theme; a
         default_bg without hover_bg gets a derived hover color). border_width: the
-        outline width in px (1 by default). radius: corner radius
-        (15 by default). press_shrink: px the box shrinks while pressed. padx / pady:
+        outline width in px (1 by default). radius: corner radius (None = the theme's
+        button_radius). press_shrink: px the box shrinks while pressed. padx / pady:
         space around the content.
         """
         super().__init__(master, theme=theme, takefocus=True, **kwargs)
