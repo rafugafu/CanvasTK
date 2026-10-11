@@ -359,19 +359,28 @@ class _ScrolledContent:
             self.viewport.configure(bg=self.themed_color(self, self.background_role))
 
     def _fit_content(self):
-        """Size the content window: it fills the viewport along axes that do
-        not scroll and is at least its natural size along axes that do.
+        """Size the content window: it is as big as the viewport along axes that do not
+        scroll, and along axes that do it keeps the size it asks for. That size is not
+        fixed: when it changes (widgets added, text wrapped differently...) the content
+        is resized by Tk, which calls this again, so the scrolled area always covers
+        all of it.
         """
         view_width = self.viewport.winfo_width()
         view_height = self.viewport.winfo_height()
-        width = view_width
-        height = view_height
-        if self._scrolls_horizontally:
-            width = max(self.winfo_reqwidth(), view_width)
-        if self._scrolls_vertically:
-            height = max(self.winfo_reqheight(), view_height)
+        # A size of 0 makes the window the size it asks for.
+        width = 0 if self._scrolls_horizontally else view_width
+        height = 0 if self._scrolls_vertically else view_height
         self.viewport.itemconfigure(self._window, width=width, height=height)
-        self.viewport.configure(scrollregion=(0, 0, width, height))
+        content_width = self.winfo_reqwidth() if self._scrolls_horizontally else 0
+        content_height = self.winfo_reqheight() if self._scrolls_vertically else 0
+        self.viewport.configure(
+            scrollregion=(
+                0,
+                0,
+                max(content_width, view_width),
+                max(content_height, view_height),
+            )
+        )
         if self._max_viewport_size is not None:
             max_width, max_height = self._max_viewport_size
             self.viewport.configure(
@@ -641,7 +650,7 @@ class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
     """
 
     _HEADER_COLOR_PARTS = _FoldableHeader._COLOR_PARTS
-    _FRAME_OPTIONS = ("text", "state")
+    _FRAME_OPTIONS = ("text", "state", "font")
 
     def __init__(
         self,
@@ -656,6 +665,7 @@ class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         max_width=300,
         scrollbar_width=None,
         state="normal",
+        font=None,
         theme=None,
         **kwargs,
     ):
@@ -667,7 +677,7 @@ class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         needed) instead of growing with them; orient: which directions scroll;
         max_height / max_width: the size in px the open contents take at most along
         the directions that scroll; scrollbar_width: the scroll bars' width in px.
-        state: "normal" or "disabled" (the header).
+        state: "normal" or "disabled" (the header). font: the font of the title.
         The header takes the color options fill_color, hover_color, text_color,
         arrow_color, focus_color, and disabled_text_color; theme / bg /
         scrollbar_*_color style the contents.
@@ -691,7 +701,7 @@ class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         if state not in ("normal", "disabled"):
             raise ValueError("state must be 'normal' or 'disabled'")
         self.header = _FoldableHeader(
-            self.outer, self, text, theme=header_theme, state=state
+            self.outer, self, text, theme=header_theme, state=state, font=font
         )
         self.header.grid(row=0, column=0, sticky="ew")
         self.scrolled = scrolled
@@ -758,6 +768,16 @@ class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         self.header.text = new_text
         self.header.refit()
         self.header.schedule_redraw()
+
+    @property
+    def font(self):
+        """The font of the title."""
+        return self.header.font
+
+    @font.setter
+    def font(self, new_font):
+        """Change the font of the title."""
+        self.header.configure(font=new_font)
 
     def is_expanded(self):
         """Whether the contents are showing."""
@@ -894,7 +914,7 @@ class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
     """
 
     _BORDER_COLOR_PARTS = _LabelFrameBorder._COLOR_PARTS
-    _FRAME_OPTIONS = ("text",)
+    _FRAME_OPTIONS = ("text", "font")
 
     def __init__(
         self,
@@ -908,6 +928,7 @@ class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         max_height=300,
         max_width=300,
         scrollbar_width=None,
+        font=None,
         theme=None,
         **kwargs,
     ):
@@ -918,7 +939,7 @@ class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         (with scroll bars that show when needed) instead of growing with them; orient:
         which directions scroll; max_height / max_width: the size in px the contents
         take at most along the directions that scroll; scrollbar_width: the scroll
-        bars' width in px. border_color and text_color
+        bars' width in px. font: the font of the title. border_color and text_color
         style the outline and the title; theme / bg / scrollbar_*_color style the
         contents.
         """
@@ -938,7 +959,7 @@ class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         self.outer.grid_columnconfigure(0, weight=1)
         self.outer.grid_rowconfigure(0, weight=1)
         self.border = _LabelFrameBorder(
-            self.outer, text, radius, border_width, theme=border_theme
+            self.outer, text, radius, border_width, theme=border_theme, font=font
         )
         self.border.grid(row=0, column=0, sticky="nsew")
         self.scrolled = scrolled
@@ -996,6 +1017,17 @@ class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
     def text(self, new_text):
         """Change the title."""
         self.border.configure(text=new_text)
+        self._place_contents()
+
+    @property
+    def font(self):
+        """The font of the title."""
+        return self.border.font
+
+    @font.setter
+    def font(self, new_font):
+        """Change the font of the title (the contents move to fit it)."""
+        self.border.configure(font=new_font)
         self._place_contents()
 
     def destroy(self):
