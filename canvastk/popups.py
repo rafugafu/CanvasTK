@@ -758,33 +758,38 @@ class OptionMenu(_DropdownOwner, CanvasWidget):
         master,
         variable=None,
         default=None,
-        *values,
+        *choices,
+        values=None,
         command=None,
         radius=None,
         border_width=1,
         focus_border_width=2,
         popup_font=None,
         popup_max_height=260,
+        popup_scrollbar_width=None,
         placeholder="",
         theme=None,
         **kwargs,
     ):
-        """Create the option menu: OptionMenu(master, variable, default, *values, ...).
+        """Create the option menu: OptionMenu(master, variable, default, *choices, ...).
 
         variable: the StringVar that holds the choice (one is made if None). default: the
-        initially selected value (added to values if missing). command(value): after a
+        initially selected value (added to the values if missing). The values are the
+        positional choices, and/or the list given as values=. command(value): after a
         pick. radius / border_width / focus_border_width: border shape. popup_font /
-        popup_max_height: the list's font and the height (px) after which it scrolls.
-        placeholder: text shown while nothing is chosen.
+        popup_max_height / popup_scrollbar_width: the list's font, the height (px) after
+        which it scrolls, and the width (px) of its scroll bar. placeholder: text shown
+        while nothing is chosen.
         """
         super().__init__(master, theme=theme, takefocus=True, **kwargs)
         self.placeholder = placeholder
         self.popup_font = popup_font
         self.popup_max_height = popup_max_height
+        self.popup_scrollbar_width = popup_scrollbar_width
         self.border_width = border_width
         self.focus_border_width = focus_border_width
         self.variable = variable if variable is not None else tk.StringVar(self)
-        self.values = list(values)
+        self.values = list(choices) + list(values or ())
         if default is not None:
             if default not in self.values:
                 self.values.insert(0, default)
