@@ -554,6 +554,10 @@ def build_demo():
     # --- Scrolled frames: vertical, horizontal, and both
     scrolled = ScrolledFrame(notebook)
     notebook.add(scrolled, text="Vertical scroll", closable=True)
+    nested = LabelFrame(scrolled, "Nested scrolled area", scrolled=True, max_height=100)
+    for n in range(20):
+        Label(nested, f"Inner line {n}").pack(anchor="w")
+    nested.pack(fill="x", padx=10, pady=8)
     for n in range(40):
         Checkbutton(scrolled, f"Scrolled option {n}").pack(anchor="w", padx=10, pady=2)
 

@@ -171,6 +171,72 @@ _GEOMETRY_METHOD_NAMES = (
 )
 
 
+# The scrolled areas of each window (the scrolled frames, foldables, and labeled frames
+# in it), and the one wheel binding per window that serves all of them.
+_WHEEL_SCROLLERS = {}
+_WHEEL_BINDINGS = {}
+
+
+def _add_wheel_scroller(top, scroller):
+    """Let the mouse wheel scroll `scroller` (in the window `top`)."""
+    _WHEEL_SCROLLERS.setdefault(top, []).append(scroller)
+    if top not in _WHEEL_BINDINGS:
+        # Bound on the whole window (not on the scrolled frame) so scrolling works over
+        # any child; _dispatch_wheel checks where the pointer is.
+        _WHEEL_BINDINGS[top] = [
+            (
+                sequence,
+                top.bind(sequence, lambda e, t=top: _dispatch_wheel(t, e), add="+"),
+            )
+            for sequence in _WHEEL_SEQUENCES
+        ]
+
+
+def _remove_wheel_scroller(top, scroller):
+    """Stop the wheel scrolling `scroller`; the last one of a window takes the window's
+    binding away.
+    """
+    scrollers = _WHEEL_SCROLLERS.get(top, [])
+    if scroller in scrollers:
+        scrollers.remove(scroller)
+    if scrollers:
+        return
+    _WHEEL_SCROLLERS.pop(top, None)
+    for sequence, funcid in _WHEEL_BINDINGS.pop(top, []):
+        try:
+            top.unbind(sequence, funcid)
+        except tk.TclError:
+            pass
+
+
+def _dispatch_wheel(top, event):
+    """A wheel turn anywhere in the window `top`: scroll the innermost scrolled area
+    under the pointer; if that one is already at its end (or does not scroll that
+    way), the one around it, and so on.
+
+    Widgets that scroll themselves (Text, Listbox, anything with handles_wheel) keep
+    their own wheel behavior.
+    """
+    try:
+        widget = top.winfo_containing(event.x_root, event.y_root)
+    except (KeyError, tk.TclError):
+        return None
+    areas = {id(s._scroll_area): s for s in _WHEEL_SCROLLERS.get(top, [])}
+    direction = wheel_direction(event) * 3
+    shift_held = bool(event.state & 0x1)
+    while widget is not None:
+        scroller = areas.get(id(widget))
+        if scroller is not None and scroller._scroll_by_wheel(direction, shift_held):
+            return "break"
+        if getattr(widget, "handles_wheel", False) or widget.winfo_class() in (
+            "Text",
+            "Listbox",
+        ):
+            return None
+        widget = widget.master
+    return None
+
+
 class _ScrolledContent:
     """The scrolling shared by ScrolledFrame and a scrolled Foldable: a viewport canvas
     (with scroll bars) inside a container, showing the content frame through a canvas
@@ -247,14 +313,8 @@ class _ScrolledContent:
         self._window = self.viewport.create_window(0, 0, window=self, anchor="nw")
         tk.Frame.bind(self, "<Configure>", lambda _: self._fit_content(), add="+")
         self.viewport.bind("<Configure>", lambda _: self._fit_content(), add="+")
-        top = self.winfo_toplevel()
-        # The wheel is bound on the whole window (not just this frame) so scrolling
-        # works over any child; _on_wheel checks where the pointer is.
-        self._wheel_bindings = [
-            (sequence, top.bind(sequence, self._on_wheel, add="+"))
-            for sequence in _WHEEL_SEQUENCES
-        ]
-        self._top = top
+        self._top = self.winfo_toplevel()
+        _add_wheel_scroller(self._top, self)
 
     def _refresh_viewport(self):
         """The theme changed: recolor the viewport like the content frame."""
@@ -290,45 +350,29 @@ class _ScrolledContent:
                 ),
             )
 
-    def _on_wheel(self, event):
-        """Mouse wheel anywhere in the window: scroll if the pointer is over this frame.
-
-        Widgets that scroll themselves (Text, Listbox, anything with handles_wheel)
-        keep their own wheel behavior.
+    def _scroll_by_wheel(self, direction, shift_held):
+        """Scroll `direction` units (positive is down or right) for a wheel turn, if
+        that is possible: False when the contents do not scroll that way or are
+        already at that end.
         """
-        try:
-            target = self.winfo_containing(event.x_root, event.y_root)
-        except (KeyError, tk.TclError):
-            return
-        widget = target
-        while widget is not None and widget is not self._scroll_area:
-            if getattr(widget, "handles_wheel", False) or widget.winfo_class() in (
-                "Text",
-                "Listbox",
-            ):
-                return
-            widget = widget.master
-        if widget is None:
-            return
-        direction = wheel_direction(event) * 3
-        shift_held = bool(event.state & 0x1)
         horizontal = self._scrolls_horizontally and (
             shift_held or not self._scrolls_vertically
         )
         if horizontal:
-            if self.winfo_reqwidth() > self.viewport.winfo_width():
-                self.viewport.xview_scroll(direction, "units")
+            view, scroll = self.viewport.xview, self.viewport.xview_scroll
         elif self._scrolls_vertically:
-            if self.winfo_reqheight() > self.viewport.winfo_height():
-                self.viewport.yview_scroll(direction, "units")
+            view, scroll = self.viewport.yview, self.viewport.yview_scroll
+        else:
+            return False
+        first, last = view()
+        if (direction > 0 and last >= 1.0 - 1e-9) or (direction < 0 and first <= 1e-9):
+            return False
+        scroll(direction, "units")
+        return True
 
     def _remove_wheel_bindings(self):
         """Stop listening to the wheel of the window."""
-        for sequence, funcid in self._wheel_bindings:
-            try:
-                self._top.unbind(sequence, funcid)
-            except tk.TclError:
-                pass
+        _remove_wheel_scroller(self._top, self)
 
 
 class _FrameOptions:
