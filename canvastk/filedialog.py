@@ -529,7 +529,14 @@ class _FileListHeader(CanvasWidget):
 
     def redraw(self, width, height):
         """Draw the header background, the three titles, and the sort chevron."""
-        self.draw_box(0, 0, width, height, self.color("neutral"), radius=6)
+        self.draw_box(
+            0,
+            0,
+            width,
+            height,
+            self.color("neutral"),
+            radius=self.colors["small_radius"],
+        )
         name_left, size_right, modified_left = self.file_list.column_positions()
         color = self.color("text_muted")
         titles = (
@@ -834,7 +841,7 @@ class _PathBar(CanvasWidget):
                     x + piece_width,
                     height - 5,
                     self.color("row_current"),
-                    radius=6,
+                    radius=self.colors["small_radius"],
                 )
             self.create_text(
                 x + piece_width / 2,

@@ -30,7 +30,7 @@ class Listbox(CanvasWidget):
     handles_wheel = True
     # Layout constants: inner margin and the width of the built-in scroll bar, in px.
     EDGE = 4
-    BAR_WIDTH = 10
+    BAR_WIDTH = 10  # the default width of the built-in scroll bar (px)
     _COLOR_PARTS = (
         "scrollbar_track_color",
         "scrollbar_thumb_color",
@@ -59,6 +59,7 @@ class Listbox(CanvasWidget):
         "yscrollcommand",
         "radius",
         "exportselection",
+        "scrollbar_width",
     )
 
     def __init__(
@@ -70,19 +71,22 @@ class Listbox(CanvasWidget):
         selectmode="browse",
         yscrollcommand=None,
         exportselection=True,
-        radius=8,
+        radius=None,
         border_width=1,
         focus_border_width=2,
         row_padding=8,
-        row_radius=5,
+        row_radius=None,
         scrolled=False,
+        scrollbar_width=None,
         theme=None,
         **kwargs,
     ):
         """row_padding: extra px added to the font's line height per row;
-        row_radius: corner radius of the selection/hover highlight;
+        radius / row_radius: corner radius of the box and of the selection/hover
+        highlight (None = the theme's radius and row_radius);
         scrolled: draw a scroll bar inside the box (it only shows while the
-        list is longer than the box)."""
+        list is longer than the box); scrollbar_width: its width in px (10 by default).
+        """
         super().__init__(master, theme=theme, takefocus=True, **kwargs)
         self.scrolled = scrolled
         self._bar_hover = False
@@ -97,6 +101,7 @@ class Listbox(CanvasWidget):
         self.yscrollcommand = yscrollcommand
         self.exportselection = exportselection
         self.radius = radius
+        self.scrollbar_width = scrollbar_width
         # State: the items, the selected row numbers, the shift-click anchor, the active
         # row, and the first visible row.
         self._items = list(contents or ())
@@ -138,7 +143,7 @@ class Listbox(CanvasWidget):
             self.width * self.font.measure("0")
             + 2 * self.EDGE
             + 8
-            + (self.BAR_WIDTH + 4 if self.scrolled else 0),
+            + (self.bar_width + 4 if self.scrolled else 0),
             self.height * self._row_height() + 2 * self.EDGE,
         )
 
@@ -348,9 +353,14 @@ class Listbox(CanvasWidget):
         """
         return self.scrolled and len(self._items) > self._visible_rows()
 
+    @property
+    def bar_width(self):
+        """The width of the built-in scroll bar in px."""
+        return self.BAR_WIDTH if self.scrollbar_width is None else self.scrollbar_width
+
     def _bar_left(self):
         """The x coordinate of the built-in scroll bar's left edge."""
-        return self.winfo_width() - self.EDGE - self.BAR_WIDTH
+        return self.winfo_width() - self.EDGE - self.bar_width
 
     def _over_bar(self, x):
         """Whether an x coordinate is over the built-in scroll bar."""
@@ -522,11 +532,11 @@ class Listbox(CanvasWidget):
             ),
             border,
             border_width,
-            self.radius,
+            self.corner(self.radius, "radius"),
         )
         row_height = self._row_height()
         self._top = self._clamp_top(self._top)
-        right = width - self.EDGE - (self.BAR_WIDTH + 4 if self._bar_visible() else 0)
+        right = width - self.EDGE - (self.bar_width + 4 if self._bar_visible() else 0)
         # Draw only the rows that can be seen (one extra for a partly visible row at the
         # bottom).
         for offset in range(self._visible_rows() + 1):
@@ -549,7 +559,7 @@ class Listbox(CanvasWidget):
                     right,
                     top + row_height,
                     fill,
-                    radius=self.row_radius,
+                    radius=self.corner(self.row_radius, "row_radius"),
                 )
             elif row == self._hover_row and not disabled:
                 self.draw_box(
@@ -558,7 +568,7 @@ class Listbox(CanvasWidget):
                     right,
                     top + row_height,
                     self.part("hover_color", "surface_hover"),
-                    radius=self.row_radius,
+                    radius=self.corner(self.row_radius, "row_radius"),
                 )
             if disabled:
                 color = self.part("disabled_text_color", "text_disabled")
@@ -572,10 +582,10 @@ class Listbox(CanvasWidget):
             self.draw_box(
                 bar_left,
                 self.EDGE,
-                bar_left + self.BAR_WIDTH,
+                bar_left + self.bar_width,
                 height - self.EDGE,
                 self.part("scrollbar_track_color", "track"),
-                radius=self.BAR_WIDTH / 2,
+                radius=self.colors["scrollbar_radius"],
             )
             thumb_top, thumb_height = self._bar_thumb()
             if self.is_disabled():
@@ -587,10 +597,10 @@ class Listbox(CanvasWidget):
             self.draw_box(
                 bar_left + 1,
                 thumb_top,
-                bar_left + self.BAR_WIDTH - 1,
+                bar_left + self.bar_width - 1,
                 thumb_top + thumb_height,
                 thumb,
-                radius=(self.BAR_WIDTH - 2) / 2,
+                radius=self.colors["scrollbar_radius"],
             )
         # Tell a connected scroll bar what is visible now (only when it changed).
         fractions = self._scroll_fractions()

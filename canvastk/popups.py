@@ -39,7 +39,7 @@ class _CanvasPopup(tk.Toplevel):
     ROW_PADDING = 10
     SEPARATOR_HEIGHT = 9
     VERTICAL_PADDING = 4
-    SCROLLBAR_WIDTH = 12
+    SCROLLBAR_WIDTH = 12  # the default width of the scroll bar (px)
 
     def __init__(
         self,
@@ -52,9 +52,11 @@ class _CanvasPopup(tk.Toplevel):
         max_height=None,
         on_close=None,
         parent_popup=None,
+        scrollbar_width=None,
     ):
         """max_rows / max_height (pixels) limit how tall the list gets; past
-        that it scrolls (wheel, keys, or its scroll bar). max_height wins."""
+        that it scrolls (wheel, keys, or its scroll bar). max_height wins.
+        scrollbar_width: the width of the scroll bar in px (12 by default)."""
         tk.Toplevel.__init__(self, owner)
         self.withdraw()
         # A borderless window the window manager leaves alone, kept above everything
@@ -72,7 +74,8 @@ class _CanvasPopup(tk.Toplevel):
         self.child_popup = None
         self._child_index = None
         self._colors = {
-            key: resolve_color(self, value) for key, value in colors.items()
+            key: resolve_color(self, value) if isinstance(value, str) else value
+            for key, value in colors.items()
         }
         self._colors_source = colors
         self._closed = False
@@ -84,6 +87,7 @@ class _CanvasPopup(tk.Toplevel):
         # owner-window binding.
         self._max_rows = max_rows
         self._max_height = max_height
+        self._scrollbar_width = scrollbar_width or self.SCROLLBAR_WIDTH
         self._scroll_drag_offset = None
         self._cascade_id = None
         self._focus_check_id = None
@@ -173,7 +177,7 @@ class _CanvasPopup(tk.Toplevel):
             + label_width
             + (28 + accelerator_width if accelerator_width else 0)
             + self._right_padding
-            + (self.SCROLLBAR_WIDTH if self._scrolling else 0),
+            + (self._scrollbar_width if self._scrolling else 0),
         )
         visible = entries[: self._max_rows]
         self.height = sum(map(self._entry_height, visible)) + 2 * self.VERTICAL_PADDING
@@ -227,7 +231,7 @@ class _CanvasPopup(tk.Toplevel):
     # ---- drawing ---------------------------------------------------------
     def _draw(self):
         """Redraw the whole popup: border, rows (hover/current highlight, check/radio marks,
-        label, accelerator, cascade arrow), separators and the scroll bar.
+        label, accelerator, cascade arrow), separators, and the scroll bar.
         """
         canvas = self.canvas
         colors = self._colors
@@ -258,11 +262,25 @@ class _CanvasPopup(tk.Toplevel):
                 continue
             disabled = entry.get("state", "normal") == "disabled"
             if index == self._hover and not disabled:
-                draw_box(4, top, self.width - 4, bottom, colors["accent_hover"], 5)
+                draw_box(
+                    4,
+                    top,
+                    self.width - 4,
+                    bottom,
+                    colors["accent_hover"],
+                    colors["row_radius"],
+                )
                 text_color = colors["accent_text"]
             else:
                 if entry.get("current"):
-                    draw_box(4, top, self.width - 4, bottom, colors["row_current"], 5)
+                    draw_box(
+                        4,
+                        top,
+                        self.width - 4,
+                        bottom,
+                        colors["row_current"],
+                        colors["row_radius"],
+                    )
                 text_color = colors["text_disabled" if disabled else "text"]
             if entry["kind"] == "check" and entry.get("checked"):
                 canvas.create_line(
@@ -311,14 +329,14 @@ class _CanvasPopup(tk.Toplevel):
                     joinstyle="round",
                 )
         if self._scrolling:
-            bar_left = self.width - self.SCROLLBAR_WIDTH
+            bar_left = self.width - self._scrollbar_width
             draw_box(
                 bar_left,
                 self.VERTICAL_PADDING,
                 self.width - 3,
                 self.height - self.VERTICAL_PADDING,
                 colors["track"],
-                (self.SCROLLBAR_WIDTH - 3) / 2,
+                colors["scrollbar_radius"],
             )
             thumb_top, thumb_height = self._scroll_thumb()
             draw_box(
@@ -329,7 +347,7 @@ class _CanvasPopup(tk.Toplevel):
                 colors[
                     "thumb_hover" if self._scroll_drag_offset is not None else "thumb"
                 ],
-                (self.SCROLLBAR_WIDTH - 5) / 2,
+                colors["scrollbar_radius"],
             )
 
     # ---- showing / closing -------------------------------------------------
@@ -468,7 +486,7 @@ class _CanvasPopup(tk.Toplevel):
 
     def _over_scrollbar(self, x):
         """Whether an x coordinate is over the scroll bar column."""
-        return self._scrolling and x >= self.width - self.SCROLLBAR_WIDTH - 2
+        return self._scrolling and x >= self.width - self._scrollbar_width - 2
 
     def _on_press(self, event):
         """Mouse down: start dragging the scroll thumb / page the list, or remember a
@@ -570,6 +588,7 @@ class _CanvasPopup(tk.Toplevel):
             self.font,
             self._colors_source,
             parent_popup=self,
+            scrollbar_width=self._scrollbar_width,
         )
         self.child_popup = child
         top = next(top for i, top, _ in self._rows() if i == index)
@@ -631,6 +650,7 @@ class _DropdownOwner:
 
     popup_font = None  # a font for the dropdown list (None = the widget's font)
     popup_max_height = 260  # the list scrolls once it would be taller (pixels)
+    popup_scrollbar_width = None  # the list's scroll bar width in px (None = 12)
 
     def _init_dropdown(self):
         """Set up the open-popup state (call once from the widget's __init__)."""
@@ -673,6 +693,7 @@ class _DropdownOwner:
             self.popup_colors(),
             min_width=anchor.winfo_width(),
             max_height=self.popup_max_height,
+            scrollbar_width=self.popup_scrollbar_width,
             on_close=self._on_dropdown_closed,
         )
         self._dropdown = popup
@@ -730,6 +751,7 @@ class OptionMenu(_DropdownOwner, CanvasWidget):
         "focus_border_width",
         "popup_font",
         "popup_max_height",
+        "popup_scrollbar_width",
     )
 
     def __init__(
@@ -739,7 +761,7 @@ class OptionMenu(_DropdownOwner, CanvasWidget):
         default=None,
         *values,
         command=None,
-        radius=8,
+        radius=None,
         border_width=1,
         focus_border_width=2,
         popup_font=None,
@@ -854,7 +876,9 @@ class OptionMenu(_DropdownOwner, CanvasWidget):
             and self._theme_overrides.get("placeholder_fill_color")
         ):
             fill = self.rc(self._theme_overrides["placeholder_fill_color"])
-        self.draw_box(0, 0, width, height, fill, border, ow, self.radius)
+        self.draw_box(
+            0, 0, width, height, fill, border, ow, self.corner(self.radius, "radius")
+        )
         if placeholder:
             text_color = self.part(
                 "placeholder_color", "text_disabled" if disabled else "text_muted"
@@ -887,6 +911,7 @@ class Menu:
     entryconfigure/post API; submenus open as cascades."""
 
     COLOR_PARTS = tuple(_POPUP_COLOR_THEME_KEYS)
+    scrollbar_width = None  # the scroll bar width in px of a long menu (None = 12)
 
     def __init__(self, master=None, font=None, theme=None, tearoff=0, **options):
         """Color options (fill_color, border_color, hover_color,
@@ -931,6 +956,8 @@ class Menu:
         """Set (or, with None, reset) the menu's popup color options."""
         if not hasattr(self, "_color_options"):
             self._color_options = {}
+        if "scrollbar_width" in options:
+            self.scrollbar_width = options["scrollbar_width"]
         for name in self.COLOR_PARTS:
             if name in options:
                 value = options[name]
@@ -1101,6 +1128,7 @@ class Menu:
             self._get_font(),
             self.colors_for(owner),
             on_close=lambda: self._popup_closed(popup, on_close),
+            scrollbar_width=self.scrollbar_width,
         )
         self._popup = popup
         popup.show(x, y, flip_y=flip_y)
@@ -1280,7 +1308,7 @@ class MenuBar(CanvasWidget):
                         if index == self._open_index
                         else self.part("hover_color", "row_current")
                     ),
-                    radius=6,
+                    radius=self.colors["small_radius"],
                 )
             self.create_text(
                 x + item_width / 2,

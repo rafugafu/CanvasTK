@@ -101,6 +101,19 @@ def hover_variant(color):
     return _blend_colors(color, "#FFFFFF", 0.35)
 
 
+# The corner radii (px), theme keys like the colors; they are the same in both modes. A
+# big number makes the corners as round as the shape allows (a pill / a circle).
+CANVAS_RADII = {
+    "radius": 8,  # entries, text boxes, list boxes, drop-downs, frames, tab pages
+    "button_radius": 15,  # buttons
+    "small_radius": 6,  # small highlights: menu bar items, file dialog parts, swatches
+    "row_radius": 5,  # the selected / hovered rows of lists and menus
+    "tab_radius": 10,  # the segmented tabs of a Notebook
+    "checkbox_radius": 5,  # check boxes (for the default size, scaled with it)
+    "track_radius": 99,  # the tracks of sliders, progress bars, and toggle switches
+    "scrollbar_radius": 99,  # the track and thumb of every scroll bar
+}
+
 # Module state: the current mode, the live theme dict (rebuilt in place), and every
 # themed widget/window (weak, so destroyed ones disappear).
 _CANVAS_APPEARANCE_MODE = "light"
@@ -169,7 +182,8 @@ def _theme_for_mode(mode):
     and the keys derived from it, then the changes made with set_theme().
     """
     dark = mode == "dark"
-    theme = dict(CANVAS_DARK_PALETTE if dark else CANVAS_LIGHT_PALETTE)
+    theme = dict(CANVAS_RADII)
+    theme.update(CANVAS_DARK_PALETTE if dark else CANVAS_LIGHT_PALETTE)
     theme.update(
         _derive_accent_keys(
             CANVAS_COLOR_THEMES["blue"]["accent"],
@@ -655,6 +669,12 @@ class _WidgetPlumbing:
     def color(self, key):
         """The theme color for  as '#rrggbb' (this widget's merged theme)."""
         return resolve_color(self, self.colors[key])
+
+    def corner(self, own, key):
+        """A corner radius: `own` if the widget was given one, else the theme's `key`
+        (see CANVAS_RADII).
+        """
+        return self.colors[key] if own is None else own
 
     def part(self, name, default_key):
         """The color of the named part: the widget's own override if set,

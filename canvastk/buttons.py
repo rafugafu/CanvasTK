@@ -67,7 +67,7 @@ class Button(CanvasWidget):
         disabled_fg=None,
         border_width=1,
         border_color=None,
-        radius=15,
+        radius=None,
         press_shrink=2,
         image=None,
         padx=13,
@@ -196,7 +196,7 @@ class Button(CanvasWidget):
             self.rc(fill),
             self.rc(border_color),
             border_width,
-            self.radius,
+            self.corner(self.radius, "button_radius"),
             inset=shrink / 2,
         )
         self.draw_content((0, 0, width, height), self.rc(fg), self.text, self.image)
@@ -509,7 +509,11 @@ class Checkbutton(_ToggleButton):
         # The check mark and corner radius were designed for an 18 px box; scale them to
         # other sizes.
         scale = (x2 - x1) / 18
-        radius = 5 * scale if self.indicator_radius is None else self.indicator_radius
+        radius = (
+            self.colors["checkbox_radius"] * scale
+            if self.indicator_radius is None
+            else self.indicator_radius
+        )
         self.draw_box(x1, y1, x2, y2, fill, border_color, 1.5, radius)
         if selected:
             self.create_line(
@@ -714,7 +718,14 @@ class Toggle(Checkbutton):
         if not (self._focused or self._hovered) or self.is_disabled():
             outline = _blend_colors(self.rc(outline), track, position)
         self.draw_box(
-            2, top, 2 + track_width, top + size, track, outline, 1.5, size / 2
+            2,
+            top,
+            2 + track_width,
+            top + size,
+            track,
+            outline,
+            1.5,
+            self.colors["track_radius"],
         )
         knob = size - 2 * self.KNOB_PADDING
         knob_left = 2 + self.KNOB_PADDING + position * (track_width - size)

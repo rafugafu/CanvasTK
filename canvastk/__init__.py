@@ -13,6 +13,7 @@ __version__ = "1.0"
 from ._core import (
     CANVAS_COLOR_THEMES,
     CANVAS_DARK_PALETTE,
+    CANVAS_RADII,
     CANVAS_LIGHT_PALETTE,
     CANVAS_WIDGET_THEME,
     CanvasWidget,
@@ -91,6 +92,7 @@ __all__ = [
     "Button",
     "CANVAS_COLOR_THEMES",
     "CANVAS_DARK_PALETTE",
+    "CANVAS_RADII",
     "CANVAS_LIGHT_PALETTE",
     "CANVAS_WIDGET_THEME",
     "CanvasWidget",

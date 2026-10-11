@@ -190,7 +190,9 @@ class _ColorSquare(CanvasWidget):
 
     def redraw(self, width, height):
         """Draw the gradient and the round marker."""
-        image = ImageTk.PhotoImage(square_image(self.hue, width, height))
+        image = ImageTk.PhotoImage(
+            square_image(self.hue, width, height, self.colors["radius"])
+        )
         self._images.append(image)
         self.create_image(0, 0, anchor="nw", image=image, tags=_CANVAS_CHROME_TAG)
         x = self.saturation * (width - 1)
@@ -289,7 +291,7 @@ class ColorDisplay(CanvasWidget):
         master,
         color="#000000",
         size=24,
-        radius=6,
+        radius=None,
         border_width=1,
         highlight=None,
         **kwargs,
@@ -329,7 +331,7 @@ class ColorDisplay(CanvasWidget):
             resolve_color(self, self.colors.get(self._color, self._color)),
             border,
             border_width,
-            self.radius,
+            self.corner(self.radius, "small_radius"),
         )
 
 

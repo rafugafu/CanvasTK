@@ -225,7 +225,12 @@ class Scale(_Slider):
         disabled = self.is_disabled()
         x1, y1, x2, y2 = self.box_on_axis(start, end, cross, thickness)
         self.draw_box(
-            x1, y1, x2, y2, self.part("track_color", "track"), radius=thickness / 2
+            x1,
+            y1,
+            x2,
+            y2,
+            self.part("track_color", "track"),
+            radius=self.colors["track_radius"],
         )
         # The thumb's position along the track; the filled part runs from the start to
         # it.
@@ -236,7 +241,7 @@ class Scale(_Slider):
                 fill = self.part("disabled_progress_color", "text_disabled")
             else:
                 fill = self.part("progress_color", "accent")
-            self.draw_box(fx1, fy1, fx2, fy2, fill, radius=thickness / 2)
+            self.draw_box(fx1, fy1, fx2, fy2, fill, radius=self.colors["track_radius"])
         half = self.thumb_size / 2
         if self.orient == "horizontal":
             box = (thumb - half, cross - half, thumb + half, cross + half)
@@ -366,7 +371,12 @@ class Progressbar(_Slider):
         thickness = self.track_thickness
         x1, y1, x2, y2 = self.box_on_axis(start, end, cross, thickness)
         self.draw_box(
-            x1, y1, x2, y2, self.part("track_color", "track"), radius=thickness / 2
+            x1,
+            y1,
+            x2,
+            y2,
+            self.part("track_color", "track"),
+            radius=self.colors["track_radius"],
         )
         length = end - start
         if self.mode == "indeterminate":
@@ -388,7 +398,7 @@ class Progressbar(_Slider):
                 fx2,
                 fy2,
                 self.part("progress_color", "accent"),
-                radius=thickness / 2,
+                radius=self.colors["track_radius"],
             )
 
 
@@ -706,6 +716,7 @@ class Scrollbar(CanvasWidget):
         "command",
         "autohide",
         "thickness",
+        "radius",
     )
 
     def __init__(
@@ -715,11 +726,13 @@ class Scrollbar(CanvasWidget):
         command=None,
         autohide=False,
         thickness=14,
+        radius=None,
         theme=None,
         **kwargs,
     ):
         """Create the bar; orient 'vertical'/'horizontal', command: the scrolled
-        widget's xview/yview, thickness: width in px.
+        widget's xview/yview, thickness: width in px, radius: the corner radius (None =
+        the theme's scrollbar_radius).
         """
         vertical = orient == "vertical"
         kwargs.setdefault("width", thickness if vertical else 50)
@@ -729,6 +742,7 @@ class Scrollbar(CanvasWidget):
         self.command = command
         self.autohide = autohide
         self.thickness = thickness
+        self.radius = radius
         self._first = 0.0
         self._last = 1.0
         self._drag_offset = None
@@ -738,6 +752,13 @@ class Scrollbar(CanvasWidget):
         self.bind("<ButtonRelease-1>", self._on_release, add="+")
         self.bind_wheel(lambda direction: self._send("scroll", direction * 3, "units"))
         self.schedule_redraw()
+
+    def _apply_options(self, options):
+        """A changed thickness also changes the width (or height) of the bar."""
+        super()._apply_options(options)
+        if "thickness" in options:
+            side = "width" if self.orient == "vertical" else "height"
+            tk.Canvas.configure(self, **{side: self.thickness})
 
     def set(self, first, last):
         """The yscrollcommand/xscrollcommand target."""
@@ -813,7 +834,7 @@ class Scrollbar(CanvasWidget):
         if self.autohide and self._first <= 0 and self._last >= 1:
             return
         vertical = self.orient == "vertical"
-        radius = (width if vertical else height) / 2
+        radius = self.corner(self.radius, "scrollbar_radius")
         self.draw_box(
             0, 0, width, height, self.part("track_color", "track"), radius=radius
         )

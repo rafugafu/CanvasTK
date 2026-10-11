@@ -60,10 +60,10 @@ def build_demo():
         command=lambda name: set_theme(CANVAS_COLOR_THEMES[name]),
     ).pack(side="left")
     Label(appearance_row, "Tab corners").pack(side="left", padx=(16, 8))
-    # Each choice sets segment_radius (the segmented tabs; None = fully rounded
+    # Each choice sets segment_radius (the segmented tabs; 99 = fully rounded
     # pills) and radius (the classic tabs and the page corners).
     tab_corner_radii = {
-        "Pill": (None, 16),
+        "Pill": (99, 16),
         "Round (10)": (10, 10),
         "Soft (6)": (6, 6),
         "Square (0)": (0, 0),
@@ -85,7 +85,11 @@ def build_demo():
     # Entries, drop-downs, combo boxes, and spin boxes, laid out as label/widget rows.
     # --- Inputs tab
     inputs = Frame(notebook)
-    notebook.add(inputs, text="Inputs")
+    notebook.add(
+        inputs,
+        text="Inputs",
+        tooltip="Entries, drop-downs, combo boxes, and spin boxes",
+    )
     row = 0
 
     def add_row(label, widget):
@@ -157,7 +161,11 @@ def build_demo():
     # three meters, and an indeterminate progress bar.
     # --- Toggles tab
     toggles = Frame(notebook)
-    notebook.add(toggles, text="Toggles & sliders")
+    notebook.add(
+        toggles,
+        text="Toggles & sliders",
+        tooltip="Check boxes, radio buttons, toggles, sliders, and meters",
+    )
     check_var = tk.IntVar(toggles, value=1)
     Checkbutton(toggles, "Enable feature", variable=check_var).pack(
         anchor="w", padx=10, pady=4
@@ -213,7 +221,9 @@ def build_demo():
     # nested, scrolled, disabled, and folded at the start), and a labeled frame.
     # --- Folds & frames tab
     folds = Frame(notebook)
-    notebook.add(folds, text="Folds & frames")
+    notebook.add(
+        folds, text="Folds & frames", tooltip="Foldable sections and labeled frames"
+    )
     details = Foldable(folds, "Details")
     Label(details, "Everything in here is an ordinary child of the foldable.").pack(
         anchor="w"
@@ -250,7 +260,9 @@ def build_demo():
     # A scrolled text box and a scrolled list box in a horizontal panedwindow.
     # --- Text tab
     text_tab = Frame(notebook)
-    notebook.add(text_tab, text="Text & lists")
+    notebook.add(
+        text_tab, text="Text & lists", tooltip="A scrolled text box and list box"
+    )
     pane = Panedwindow(text_tab, orient="horizontal")
     pane.pack(fill="both", expand=True)
     textbox = Textbox(
@@ -280,7 +292,9 @@ def build_demo():
     # bigger check box.
     # --- Buttons tab
     buttons = Frame(notebook)
-    notebook.add(buttons, text="Buttons")
+    notebook.add(
+        buttons, text="Buttons", tooltip="Buttons in custom colors, fonts, and tooltips"
+    )
     Button(
         buttons, "cancel", default_bg="#E9E2E2", hover_bg="#F8F4F4", press_bg="#E9E2E2"
     ).grid(row=0, column=0, padx=10, pady=10)
@@ -318,7 +332,11 @@ def build_demo():
 
     # --- Toplevels tab: subwindows with their own themes
     windows_tab = Frame(notebook)
-    notebook.add(windows_tab, text="Toplevels")
+    notebook.add(
+        windows_tab,
+        text="Toplevels",
+        tooltip="Subwindows with their own themes and appearance modes",
+    )
 
     def open_toplevel(title, **options):
         """Open a demo Toplevel (extra options such as theme= go to Toplevel) with some widgets and a 'Make darker' button."""
@@ -383,13 +401,22 @@ def build_demo():
         window_row,
         "Make this window dark",
         command=lambda: root.set_theme(CANVAS_DARK_PALETTE),
-    ).pack(side="left", padx=(0, 8))
+    ).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
     Button(
         window_row,
         "Purple accent for this window",
         command=lambda: root.set_theme({"accent": "#7048e8"}),
-    ).pack(side="left", padx=(0, 8))
-    Button(window_row, "Reset this window", command=root.reset_theme).pack(side="left")
+    ).grid(row=0, column=1, sticky="w", padx=(0, 8), pady=2)
+    Button(
+        window_row,
+        "Square corners for this window",
+        command=lambda: root.set_theme(
+            {key: 0 for key in CANVAS_RADII if key != "checkbox_radius"}
+        ),
+    ).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=2)
+    Button(window_row, "Reset this window", command=root.reset_theme).grid(
+        row=1, column=1, sticky="w", padx=(0, 8), pady=2
+    )
 
     # Panedwindows nested to split in both directions.
     # --- Panes tab: nested horizontal + vertical Panedwindows
@@ -469,7 +496,11 @@ def build_demo():
     # tkinter.filedialog and tkinter.messagebox.
     # --- Dialogs tab
     dialogs_tab = Frame(notebook)
-    notebook.add(dialogs_tab, text="Dialogs")
+    notebook.add(
+        dialogs_tab,
+        text="Dialogs",
+        tooltip="File dialogs, message boxes, and the color picker",
+    )
     dialog_result = tk.StringVar(dialogs_tab, value="Pick a dialog to open.")
     Label(
         dialogs_tab,

@@ -89,7 +89,7 @@ class _FramedWidget(_WidgetPlumbing, tk.Frame):
         self,
         master,
         theme=None,
-        radius=8,
+        radius=None,
         border_width=1,
         focus_border_width=2,
         placeholder="",
@@ -431,7 +431,16 @@ class _FramedWidget(_WidgetPlumbing, tk.Frame):
         else:
             border = self.part("border_color", "border")
             border_width = self.border_width
-        chrome.draw_box(0, 0, width, height, fill, border, border_width, self.radius)
+        chrome.draw_box(
+            0,
+            0,
+            width,
+            height,
+            fill,
+            border,
+            border_width,
+            self.corner(self.radius, "radius"),
+        )
         self.paint_extras(chrome, width, height)
 
     def paint_extras(self, chrome, width, height):
@@ -461,7 +470,7 @@ class Entry(_FramedWidget):
         width=20,
         justify="left",
         theme=None,
-        radius=8,
+        radius=None,
         border_width=1,
         focus_border_width=2,
         right_padding=8,
@@ -564,6 +573,7 @@ class Combobox(_DropdownOwner, Entry):
         "postcommand",
         "popup_font",
         "popup_max_height",
+        "popup_scrollbar_width",
     )
 
     def __init__(
@@ -575,19 +585,22 @@ class Combobox(_DropdownOwner, Entry):
         state="normal",
         popup_font=None,
         popup_max_height=260,
+        popup_scrollbar_width=None,
         **kwargs,
     ):
         """Create the combo box.
 
         values: the list entries. command(value) / postcommand(): called after a pick /
-        before the list opens. popup_font / popup_max_height: the list's font and the
-        height (px) after which it scrolls. Everything else is as Entry.
+        before the list opens. popup_font / popup_max_height / popup_scrollbar_width: the
+        list's font, the height (px) after which it scrolls, and its scroll bar's width
+        (px). Everything else is as Entry.
         """
         Entry.__init__(
             self, master, state=state, right_padding=self.ARROW_WIDTH, **kwargs
         )
         self.popup_font = popup_font
         self.popup_max_height = popup_max_height
+        self.popup_scrollbar_width = popup_scrollbar_width
         self.values = list(values)
         self.command = command
         self.postcommand = postcommand
@@ -845,7 +858,11 @@ class Textbox(_FramedWidget):
     """A multi-line text box with a rounded canvas border and an optional
     built-in scrollbar. Everything tk.Text offers is forwarded."""
 
-    _OWN_OPTIONS = _FramedWidget._OWN_OPTIONS + ("yscrollcommand", "xscrollcommand")
+    _OWN_OPTIONS = _FramedWidget._OWN_OPTIONS + (
+        "yscrollcommand",
+        "xscrollcommand",
+        "scrollbar_width",
+    )
     _SCROLLBAR_PARTS = {
         "scrollbar_track_color": "track_color",
         "scrollbar_thumb_color": "thumb_color",
@@ -865,8 +882,9 @@ class Textbox(_FramedWidget):
         yscrollcommand=None,
         xscrollcommand=None,
         orient="vertical",
+        scrollbar_width=None,
         theme=None,
-        radius=8,
+        radius=None,
         border_width=1,
         focus_border_width=2,
         placeholder="",
@@ -879,8 +897,10 @@ class Textbox(_FramedWidget):
         characters by default, like tk.Text).
         orient: with scrolled, which scroll bars there are: "vertical", "horizontal", or
         "both". yscrollcommand / xscrollcommand: for scroll bars of your own (they work
-        together with scrolled).
-        radius, border_width, focus_border_width: border shape. placeholder: hint
+        together with scrolled). scrollbar_width: the width in px of the built-in scroll
+        bars (14 by default).
+        radius, border_width, focus_border_width: border shape (radius None = the
+        theme's). placeholder: hint
         while empty.
         """
         if orient not in ("vertical", "horizontal", "both"):
@@ -923,6 +943,9 @@ class Textbox(_FramedWidget):
                 for name, own_name in self._SCROLLBAR_PARTS.items()
                 if name in theme
             }
+            width_option = (
+                {} if scrollbar_width is None else {"thickness": scrollbar_width}
+            )
             if horizontal:
                 self.horizontal_scrollbar = Scrollbar(
                     self,
@@ -930,6 +953,7 @@ class Textbox(_FramedWidget):
                     command=text.xview,
                     autohide=True,
                     theme=scrollbar_theme,
+                    **width_option,
                 )
                 self.horizontal_scrollbar.pack(
                     side="bottom", fill="x", padx=5, pady=(0, 5)
@@ -941,6 +965,7 @@ class Textbox(_FramedWidget):
                     command=text.yview,
                     autohide=True,
                     theme=scrollbar_theme,
+                    **width_option,
                 )
                 self.scrollbar.pack(side="right", fill="y", padx=(0, 5), pady=5)
                 text.configure(yscrollcommand=self._on_yscroll)
@@ -1006,6 +1031,11 @@ class Textbox(_FramedWidget):
                 self._user_xscrollcommand = value
                 if self.horizontal_scrollbar is None:
                     self.inner.configure(xscrollcommand=value)
+            elif key == "scrollbar_width":
+                self.scrollbar_width = value
+                for bar in (self.scrollbar, self.horizontal_scrollbar):
+                    if bar is not None:
+                        bar.configure(thickness=value)
             elif key in self._COLOR_PARTS:
                 self.set_color_part(key, value)
                 if key in self._SCROLLBAR_PARTS:

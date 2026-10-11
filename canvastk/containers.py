@@ -29,6 +29,7 @@ from ._core import (
     resolve_color,
     wheel_direction,
 )
+from .popups import Tooltip
 from .sliders import (
     Scrollbar,
 )
@@ -268,13 +269,22 @@ class _ScrolledContent:
             raise ValueError("orient must be 'vertical', 'horizontal' or 'both'")
 
     def _build_viewport(
-        self, area, orient, autohide, scrollbar_theme, background, max_size=None
+        self,
+        area,
+        orient,
+        autohide,
+        scrollbar_theme,
+        background,
+        max_size=None,
+        scrollbar_width=None,
     ):
         """Create the viewport and the scroll bars in the container `area`. With
         `max_size` (width, height), the viewport asks for the size of the contents up
         to that many px along the axes that scroll (more scrolls); without it, it
-        keeps the canvas's own size.
+        keeps the canvas's own size. scrollbar_width: the width of the scroll bars in
+        px (None = the Scrollbar's default).
         """
+        width_option = {} if scrollbar_width is None else {"thickness": scrollbar_width}
         self._scroll_area = area
         self._max_viewport_size = max_size
         self._scrolls_vertically = orient in ("vertical", "both")
@@ -291,6 +301,7 @@ class _ScrolledContent:
                 command=self.viewport.yview,
                 autohide=autohide,
                 theme=scrollbar_theme,
+                **width_option,
             )
             self.vertical_scrollbar.grid(row=0, column=1, sticky="ns", padx=(2, 0))
             self.viewport.configure(yscrollcommand=self.vertical_scrollbar.set)
@@ -301,6 +312,7 @@ class _ScrolledContent:
                 command=self.viewport.xview,
                 autohide=autohide,
                 theme=scrollbar_theme,
+                **width_option,
             )
             self.horizontal_scrollbar.grid(row=1, column=0, sticky="ew", pady=(2, 0))
             self.viewport.configure(xscrollcommand=self.horizontal_scrollbar.set)
@@ -410,10 +422,19 @@ class ScrolledFrame(_ScrolledContent, _ThemedBackground, tk.Frame):
     scrolls vertically (horizontally for orient='horizontal'); Shift+wheel
     always scrolls horizontally."""
 
-    def __init__(self, master, orient="vertical", autohide=True, theme=None, **kwargs):
+    def __init__(
+        self,
+        master,
+        orient="vertical",
+        autohide=True,
+        scrollbar_width=None,
+        theme=None,
+        **kwargs,
+    ):
         """Create the scrolled frame.
 
         orient: which directions scroll. autohide: scroll bars hide when not needed.
+        scrollbar_width: the width of the scroll bars in px.
         theme / bg / scrollbar_*_color: styling. The returned object is the *content*
         frame; its geometry methods are redirected to the outer container.
         """
@@ -435,6 +456,7 @@ class ScrolledFrame(_ScrolledContent, _ThemedBackground, tk.Frame):
             autohide,
             scrollbar_theme,
             self.initial_background(master, background),
+            scrollbar_width=scrollbar_width,
         )
         kwargs.setdefault("bd", 0)
         kwargs.setdefault("highlightthickness", 0)
@@ -546,7 +568,16 @@ class _FoldableHeader(CanvasWidget):
             else None
         )
         disabled_color = self.part("disabled_text_color", "text_disabled")
-        self.draw_box(0, 0, width, height, fill, outline, 2 if outline else 0, 8)
+        self.draw_box(
+            0,
+            0,
+            width,
+            height,
+            fill,
+            outline,
+            2 if outline else 0,
+            self.colors["radius"],
+        )
         direction = "down" if self.foldable.is_expanded() else "right"
         self.draw_chevron(
             19,
@@ -600,6 +631,7 @@ class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         orient="vertical",
         max_height=300,
         max_width=300,
+        scrollbar_width=None,
         state="normal",
         theme=None,
         **kwargs,
@@ -611,7 +643,8 @@ class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         contents. scrolled: scroll the contents (with a scroll bar that shows when
         needed) instead of growing with them; orient: which directions scroll;
         max_height / max_width: the size in px the open contents take at most along
-        the directions that scroll. state: "normal" or "disabled" (the header).
+        the directions that scroll; scrollbar_width: the scroll bars' width in px.
+        state: "normal" or "disabled" (the header).
         The header takes the color options fill_color, hover_color, text_color,
         arrow_color, focus_color, and disabled_text_color; theme / bg /
         scrollbar_*_color style the contents.
@@ -657,6 +690,7 @@ class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
                 scrollbar_theme,
                 self.initial_background(master, background),
                 (max_width, max_height),
+                scrollbar_width,
             )
             content_master = self.viewport
         kwargs.setdefault("bd", 0)
@@ -808,7 +842,7 @@ class _LabelFrameBorder(CanvasWidget):
             None,
             self.part("border_color", "border"),
             self.border_width,
-            self.radius,
+            self.corner(self.radius, "radius"),
         )
         if not self.text:
             return
@@ -851,12 +885,13 @@ class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         master,
         text="",
         padding=8,
-        radius=8,
+        radius=None,
         border_width=1,
         scrolled=False,
         orient="vertical",
         max_height=300,
         max_width=300,
+        scrollbar_width=None,
         theme=None,
         **kwargs,
     ):
@@ -866,7 +901,8 @@ class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
         radius / border_width: the shape of the outline. scrolled: scroll the contents
         (with scroll bars that show when needed) instead of growing with them; orient:
         which directions scroll; max_height / max_width: the size in px the contents
-        take at most along the directions that scroll. border_color and text_color
+        take at most along the directions that scroll; scrollbar_width: the scroll
+        bars' width in px. border_color and text_color
         style the outline and the title; theme / bg / scrollbar_*_color style the
         contents.
         """
@@ -908,6 +944,7 @@ class LabelFrame(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
                 scrollbar_theme,
                 self.initial_background(master, background),
                 (max_width, max_height),
+                scrollbar_width,
             )
             content_master = self.viewport
         kwargs.setdefault("bd", 0)
@@ -1013,6 +1050,24 @@ class _FrameColorParts:
         return tk.Frame.cget(self, key)
 
 
+class _TabTooltip(Tooltip):
+    """The tooltip of the tabs of a Notebook: the notebook decides when to show it (for
+    the tab under the pointer), not the pointer entering the strip.
+    """
+
+    def __init__(self, widget):
+        """Attach it to the notebook's strip."""
+        super().__init__(widget, "")
+
+    def _schedule(self, event):
+        """The pointer entered the strip: wait for the notebook to say which tab."""
+
+    def show_for(self, text, event):
+        """Show `text` after the delay, next to the pointer."""
+        self.text = text
+        Tooltip._schedule(self, event)
+
+
 class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
     """Tabs above switchable pages, drawn on a canvas.
 
@@ -1070,14 +1125,14 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         master,
         font=None,
         theme=None,
-        radius=8,
+        radius=None,
         padding=8,
         tab_padx=16,
         closable=False,
         on_close=None,
         destroy_on_close=True,
         style="segmented",
-        segment_radius=10,
+        segment_radius=None,
         draggable=False,
         **kwargs,
     ):
@@ -1087,9 +1142,9 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         destroy_on_close destroys the page widget when its tab is closed.
         style: 'segmented' (the default: a rounded segmented control above a
         rounded page, like macOS / customtkinter) or 'classic' (folder-like tabs).
-        segment_radius: the corner radius of the segmented style's tabs
-        (default 10, round corners; None = fully rounded pills; the pill
-        behind them follows it).
+        radius / segment_radius: the corner radius of the page and of the segmented
+        style's tabs (None = the theme's radius and tab_radius; a big number such as
+        99 makes the tabs fully rounded pills; the pill behind them follows it).
         draggable: tabs can be reordered by dragging them along the strip."""
         if style not in ("classic", "segmented"):
             raise ValueError("style must be 'classic' or 'segmented'")
@@ -1146,12 +1201,14 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         tk.Misc.lower(self.chrome)
         # Mouse handling on the chrome: clicks, middle-click close, dragging, hover, and
         # the wheel.
+        self._tab_tooltip = _TabTooltip(self.chrome)
+        self._tooltip_tab = None  # the page of the tab the tooltip is for
         self.chrome.bind("<ButtonPress-1>", self._on_press, add="+")
         self.chrome.bind("<ButtonPress-2>", self._on_middle_press, add="+")
         self.chrome.bind("<B1-Motion>", self._on_tab_drag, add="+")
         self.chrome.bind("<ButtonRelease-1>", self._on_tab_drop, add="+")
         self.chrome.bind("<Motion>", self._on_motion, add="+")
-        self.chrome.bind("<Leave>", lambda _: self._set_hover(None, None), add="+")
+        self.chrome.bind("<Leave>", self._on_leave, add="+")
         for sequence in _WHEEL_SEQUENCES:
             self.chrome.bind(
                 sequence, lambda e: self._scroll_tabs(wheel_direction(e) * 60), add="+"
@@ -1209,12 +1266,21 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         raise tk.TclError(f"tab {tab_id!r} not found")
 
     def add(self, child, **options):
-        """Append a page as a new tab (options: text, state, image, closable)."""
+        """Append a page as a new tab (options: text, state, image, closable, tooltip)."""
         self.insert("end", child, **options)
 
-    def insert(self, where, child, text="", state="normal", image=None, closable=None):
+    def insert(
+        self,
+        where,
+        child,
+        text="",
+        state="normal",
+        image=None,
+        closable=None,
+        tooltip=None,
+    ):
         """Insert a page as a tab before `where` ('end' appends); the first tab added is
-        selected.
+        selected. tooltip: a text shown while the pointer rests on the tab.
         """
         record = {
             "child": child,
@@ -1222,6 +1288,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
             "state": state,
             "image": image,
             "closable": closable,
+            "tooltip": tooltip,
         }
         position = (
             len(self._tab_records) if where == "end" else self._record_index(where)
@@ -1301,7 +1368,9 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         return None
 
     def tab(self, tab_id, option=None, **options):
-        """Read (option) or change (options) a tab's text, state, image, or closable."""
+        """Read (option) or change (options) a tab's text, state, image, closable, or
+        tooltip.
+        """
         record = self._tab_records[self._record_index(tab_id)]
         if options:
             record.update(options)
@@ -1465,13 +1534,33 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
             self._hover_tab, self._hover_close, self._hover_arrow = state
             self.chrome.schedule_redraw()
 
+    def _on_leave(self, _):
+        """Pointer left the strip: nothing is hovered any more."""
+        self._set_hover(None, None)
+        self._tooltip_tab = None
+
     def _on_motion(self, event):
-        """Pointer moved over the strip: update the hover state."""
-        self._set_hover(
-            self._tab_at(event.x, event.y),
-            self._close_at(event.x, event.y),
-            self._arrow_at(event.x, event.y),
+        """Pointer moved over the strip: update the hover state and the tab's tooltip."""
+        tab = self._tab_at(event.x, event.y)
+        close = self._close_at(event.x, event.y)
+        arrow = self._arrow_at(event.x, event.y)
+        self._set_hover(tab, close, arrow)
+        self._update_tab_tooltip(
+            tab if close is None and arrow is None else None, event
         )
+
+    def _update_tab_tooltip(self, index, event):
+        """The pointer is over tab `index` (None = no tab): when that is another tab than
+        before, hide the tooltip and, if the new tab has one, show it after a delay.
+        """
+        child = None if index is None else self._tab_records[index]["child"]
+        if child is self._tooltip_tab:
+            return
+        self._tooltip_tab = child
+        self._tab_tooltip.hide()
+        text = None if index is None else self._tab_records[index].get("tooltip")
+        if text:
+            self._tab_tooltip.show_for(text, event)
 
     def _on_middle_press(self, event):
         """Middle click on a closable tab closes it."""
@@ -1653,7 +1742,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
                     box_left + self.ARROW_WIDTH - 2,
                     bottom,
                     self.part("arrow_hover_color", "accent_hover"),
-                    radius=6,
+                    radius=self.colors["small_radius"],
                 )
                 color = self.part("arrow_hover_text_color", "accent_text")
             else:
@@ -1691,7 +1780,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
             self.part("page_color", "surface"),
             border,
             1,
-            self.radius,
+            self.corner(self.radius, "radius"),
         )
         if not visible:
             return
@@ -1709,17 +1798,11 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
             track_right,
             tab_height,
             self.part("track_color", "neutral"),
-            radius=(
-                tab_height / 2
-                if self.segment_radius is None
-                else self.segment_radius + 3
-            ),
+            radius=self.corner(self.segment_radius, "tab_radius") + 3,
         )
         # Segments are 3 px inside the pill on every side.
         segment_height = tab_height - 6
-        segment_radius = (
-            segment_height / 2 if self.segment_radius is None else self.segment_radius
-        )
+        segment_radius = self.corner(self.segment_radius, "tab_radius")
         for i, record in visible:
             left, right = (v - offset for v in spans[i])
             disabled = record["state"] == "disabled"
@@ -1776,7 +1859,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
             else surface
         )
         border = self.part("border_color", "border")
-        radius = self.radius
+        radius = self.corner(self.radius, "radius")
         # The page's top-left corner is square when the first tab is selected (the tab
         # continues it).
         first_selected = bool(visible) and visible[0][0] == selected_index
