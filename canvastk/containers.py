@@ -39,9 +39,11 @@ from .sliders import (
 
 
 def requested_size_of(widget):
-    """(width, height) a container child asks for. A ScrolledFrame's content
-    frame can be arbitrarily large, so its scrolling container is measured."""
-    if isinstance(widget, ScrolledFrame):
+    """(width, height) a container child asks for. A ScrolledFrame, Foldable, or
+    LabelFrame is the frame that holds the children, which can be arbitrarily big and
+    does not include the header, outline, or scroll bars, so the outer container the
+    parent sees is measured instead."""
+    if isinstance(widget, (ScrolledFrame, Foldable, LabelFrame)):
         widget = widget.outer
     return widget.winfo_reqwidth(), widget.winfo_reqheight()
 
