@@ -275,7 +275,7 @@ class Label(CanvasWidget):
     def requested_size(self):
         """The size of the (wrapped) text and image plus padx/pady on each side."""
         width, height = measure_content(
-            self.display_text(), self.image, self.font, self.wraplength
+            self.display_text(), self.image, self.font, self.wraplength, canvas=self
         )
         return width + 2 * self.padx, height + 2 * self.pady
 

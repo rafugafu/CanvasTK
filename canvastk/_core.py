@@ -638,17 +638,24 @@ def measure_widths(parent, font, texts):
         canvas.destroy()
 
 
-def measure_content(text, image, font, wraplength=0, gap=6):
-    """(width, height) of text with an optional image to its left."""
-    lines = text.split("\n") if text else []
-    text_width = max((font.measure(line) for line in lines), default=0)
-    line_count = len(lines)
-    if wraplength and text_width > wraplength:
-        line_count = sum(
-            max(1, math.ceil(font.measure(line) / wraplength)) for line in lines
+def measure_content(text, image, font, wraplength=0, gap=6, canvas=None):
+    """(width, height) of text with an optional image to its left.
+
+    With a wraplength the text is wrapped at word boundaries, which needs more rows
+    than its length divided by the wraplength; so it is measured by `canvas` itself,
+    which wraps it exactly as it will be drawn.
+    """
+    if wraplength and text:
+        item = tk.Canvas.create_text(
+            canvas, 0, 0, text=text, font=font, width=wraplength, anchor="nw"
         )
-        text_width = wraplength
-    text_height = line_count * font.metrics("linespace")
+        left, top, right, bottom = tk.Canvas.bbox(canvas, item)
+        tk.Canvas.delete(canvas, item)
+        text_width, text_height = right - left, bottom - top
+    else:
+        lines = text.split("\n") if text else []
+        text_width = max((font.measure(line) for line in lines), default=0)
+        text_height = len(lines) * font.metrics("linespace")
     image_width = image.width() if image else 0
     image_height = image.height() if image else 0
     width = image_width + (gap if image_width and text_width else 0) + text_width
