@@ -19,9 +19,7 @@ from PIL import Image, ImageDraw, ImageTk
 CANVAS_LIGHT_PALETTE = {
     "window": "#EBEBEB",
     "neutral": "#E9E2E2",
-    "neutral_hover": "#F8F4F4",
     "surface": "#FFFFFF",
-    "surface_hover": "#F1F7FA",
     "surface_disabled": "#EFEFEF",
     "border": "#8C9097",
     "text": "#1E1E1E",
@@ -29,7 +27,6 @@ CANVAS_LIGHT_PALETTE = {
     "text_disabled": "#A3A7AD",
     "track": "#D9DCE0",
     "thumb": "#B4B9C0",
-    "thumb_hover": "#8C9097",
     "separator": "#D0D3D8",
     "tooltip": "#FFFFE0",
     "button_border": "#000000",
@@ -39,9 +36,7 @@ CANVAS_LIGHT_PALETTE = {
 CANVAS_DARK_PALETTE = {
     "window": "#242424",
     "neutral": "#3A3A3C",
-    "neutral_hover": "#56565B",
     "surface": "#2B2B2B",
-    "surface_hover": "#353638",
     "surface_disabled": "#222222",
     "border": "#5A5F63",
     "text": "#DCE4EE",
@@ -49,7 +44,6 @@ CANVAS_DARK_PALETTE = {
     "text_disabled": "#6A6F73",
     "track": "#46494C",
     "thumb": "#62666A",
-    "thumb_hover": "#80858A",
     "separator": "#454849",
     "tooltip": "#3A3A3A",
     "button_border": "#1A1A1A",
@@ -79,12 +73,15 @@ def _blend_colors(color, other, amount):
     return "#%02x%02x%02x" % tuple(round(x + (y - x) * amount) for x, y in zip(a, b))
 
 
-def _is_light_color(color, threshold=128):
-    """Whether the perceived brightness (0-255, luma weights) of a '#rrggbb' color is
-    above threshold.
-    """
+def _brightness(color):
+    """The perceived brightness (0-255, luma weights) of a '#rrggbb' color."""
     red, green, blue = _hex_to_rgb(color)
-    return (0.299 * red + 0.587 * green + 0.114 * blue) > threshold
+    return 0.299 * red + 0.587 * green + 0.114 * blue
+
+
+def _is_light_color(color, threshold=128):
+    """Whether the perceived brightness of a '#rrggbb' color is above threshold."""
+    return _brightness(color) > threshold
 
 
 # Colors brighter than this get a darker hover color, all others a lighter one.
@@ -99,6 +96,36 @@ def hover_variant(color):
     if _is_light_color(color, _HOVER_DARKEN_ABOVE_BRIGHTNESS):
         return _blend_colors(color, "#000000", 0.15)
     return _blend_colors(color, "#FFFFFF", 0.35)
+
+
+def hover_variant_against(color, background):
+    """A hover color for a thumb-like color drawn on `background`: lighter if the color
+    is lighter than the background and darker if it is darker, so that the contrast
+    with the background grows (the amounts are those of hover_variant).
+    """
+    color, background = _as_hex(color), _as_hex(background)
+    if _brightness(color) >= _brightness(background):
+        return _blend_colors(color, "#FFFFFF", 0.35)
+    return _blend_colors(color, "#000000", 0.15)
+
+
+def _derive_hover_keys(theme):
+    """The hover keys that follow from the colors in `theme` (a dict of theme keys): the
+    hover variant of surface, neutral, and thumb (the thumb moving away from the
+    track), for the ones `theme` does not give itself.
+    """
+    derived = {}
+    for base, hover in (("surface", "surface_hover"), ("neutral", "neutral_hover")):
+        if theme.get(base) and not theme.get(hover):
+            derived[hover] = hover_variant(theme[base])
+    if theme.get("thumb") and not theme.get("thumb_hover"):
+        track = theme.get("track") or CANVAS_WIDGET_THEME.get("track")
+        derived["thumb_hover"] = (
+            hover_variant_against(theme["thumb"], track)
+            if track
+            else hover_variant(theme["thumb"])
+        )
+    return derived
 
 
 # The corner radii (px), theme keys like the colors; they are the same in both modes. A
@@ -169,6 +196,8 @@ def expand_theme(theme, base=None, dark=None):
         )
         for key, value in derived.items():
             expanded.setdefault(key, value)
+    for key, value in _derive_hover_keys(theme).items():
+        expanded.setdefault(key, value)
     return expanded
 
 
@@ -190,6 +219,7 @@ def _theme_for_mode(mode):
     dark = mode == "dark"
     theme = dict(CANVAS_RADII)
     theme.update(CANVAS_DARK_PALETTE if dark else CANVAS_LIGHT_PALETTE)
+    theme.update(_derive_hover_keys(theme))
     theme.update(
         _derive_accent_keys(
             CANVAS_COLOR_THEMES["blue"]["accent"],
@@ -741,18 +771,23 @@ class _WidgetPlumbing:
             return resolve_color(self, value)
         return resolve_color(self, self.colors[default_key])
 
-    def hover_part(self, name, fill_name, default_key):
+    def hover_part(self, name, fill_name, default_key, against=None):
         """The color of a hover state, for something drawn in the fill color `fill_name`:
         the widget's own `name` if set; else, if the widget's own `fill_name` is set,
         its hover variant (see hover_variant), so the hover is always visible against
-        the color that was given; else the theme color `default_key`.
+        the color that was given; else the theme color `default_key`. For a thumb on a
+        track, `against` is (the part of the track, its theme key): the hover then
+        moves away from the track instead.
         """
         value = self._theme_overrides.get(name)
         if value:
             return resolve_color(self, value)
         fill = self._theme_overrides.get(fill_name)
         if fill:
-            return hover_variant(resolve_color(self, fill))
+            fill = resolve_color(self, fill)
+            if against is not None:
+                return hover_variant_against(fill, self.part(*against))
+            return hover_variant(fill)
         return resolve_color(self, self.colors[default_key])
 
     def set_color_part(self, name, value):

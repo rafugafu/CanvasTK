@@ -884,7 +884,7 @@ class OptionMenu(_DropdownOwner, CanvasWidget):
             ow = self.focus_border_width
         elif self._hovered:
             fill = self.hover_part("hover_fill_color", "fill_color", "surface_hover")
-            border = self.part("hover_border_color", "accent")
+            border = self.hover_part("hover_border_color", "border_color", "accent")
             ow = self.border_width
         else:
             fill = self.part("fill_color", "surface")

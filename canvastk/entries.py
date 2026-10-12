@@ -586,6 +586,7 @@ class Combobox(_DropdownOwner, Entry):
         popup_font=None,
         popup_max_height=260,
         popup_scrollbar_width=None,
+        default=None,
         **kwargs,
     ):
         """Create the combo box.
@@ -593,7 +594,8 @@ class Combobox(_DropdownOwner, Entry):
         values: the list entries. command(value) / postcommand(): called after a pick /
         before the list opens. popup_font / popup_max_height / popup_scrollbar_width: the
         list's font, the height (px) after which it scrolls, and its scroll bar's width
-        (px). Everything else is as Entry.
+        (px). default: the text the combo box starts with (it does not have to be one of
+        the values, and command is not called for it). Everything else is as Entry.
         """
         Entry.__init__(
             self, master, state=state, right_padding=self.ARROW_WIDTH, **kwargs
@@ -608,6 +610,8 @@ class Combobox(_DropdownOwner, Entry):
         self.chrome.bind("<ButtonPress-1>", self._on_chrome_press, add="+")
         self.inner.bind("<ButtonPress-1>", self._on_inner_press, add="+")
         self.inner.bind("<Down>", lambda _: self.open_dropdown(), add="+")
+        if default is not None:
+            self.set(default)  # also works while the field is readonly or disabled
 
     def _on_chrome_press(self, event):
         """Click on the border area: the arrow part toggles the list."""

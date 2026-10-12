@@ -2042,7 +2042,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         image = cross_image(
             size,
             (
-                self.part("close_hover_color", "danger")
+                self.hover_part("close_hover_color", "close_color", "danger")
                 if hovered
                 else (base_color or self.part("close_color", "text_muted"))
             ),

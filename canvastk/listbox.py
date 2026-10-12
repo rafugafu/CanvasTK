@@ -595,6 +595,7 @@ class Listbox(CanvasWidget):
                     "scrollbar_thumb_hover_color",
                     "scrollbar_thumb_color",
                     "thumb_hover",
+                    ("scrollbar_track_color", "track"),
                 )
             else:
                 thumb = self.part("scrollbar_thumb_color", "thumb")

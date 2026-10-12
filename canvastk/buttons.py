@@ -418,7 +418,9 @@ class _ToggleButton(CanvasWidget):
         elif self._focused:
             border_color = self.part("focus_color", "focus_ring")
         elif self._hovered:
-            border_color = self.part("hover_border_color", "accent")
+            border_color = self.hover_part(
+                "hover_border_color", "border_color", "accent"
+            )
         else:
             border_color = self.part("border_color", "border")
         self.draw_indicator(2, top, 2 + size, top + size, selected, border_color)
@@ -711,7 +713,9 @@ class Toggle(Checkbutton):
             if self._focused:
                 outline = self.part("focus_color", "focus_ring")
             elif self._hovered:
-                outline = self.part("hover_border_color", "accent")
+                outline = self.hover_part(
+                    "hover_border_color", "border_color", "accent"
+                )
             else:
                 outline = self.part("border_color", "border")
         track = _blend_colors(self.rc(off), self.rc(on), position)
