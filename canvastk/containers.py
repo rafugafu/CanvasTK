@@ -589,7 +589,7 @@ class _FoldableHeader(CanvasWidget):
         """
         disabled = self.is_disabled()
         fill = (
-            self.part("hover_color", "neutral_hover")
+            self.hover_part("hover_color", "fill_color", "neutral_hover")
             if self._hovered and not disabled
             else None
         )
@@ -1873,7 +1873,9 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
             if selected:
                 fill = self.part("selected_tab_color", "accent")
             elif i == self._hover_tab and not disabled:
-                fill = self.part("tab_hover_color", "neutral_hover")
+                fill = self.hover_part(
+                    "tab_hover_color", "track_color", "neutral_hover"
+                )
             else:
                 fill = None
             if fill is not None:
@@ -1946,7 +1948,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
                 self._tab_boxes.append((left, right, i))
                 continue
             if i == self._hover_tab and not disabled:
-                fill = self.part("tab_hover_color", "neutral_hover")
+                fill = self.hover_part("tab_hover_color", "tab_color", "neutral_hover")
             else:
                 fill = self.part("tab_color", "neutral")
             chrome.draw_box(

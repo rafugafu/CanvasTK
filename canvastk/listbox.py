@@ -567,7 +567,7 @@ class Listbox(CanvasWidget):
                     top,
                     right,
                     top + row_height,
-                    self.part("hover_color", "surface_hover"),
+                    self.hover_part("hover_color", "fill_color", "surface_hover"),
                     radius=self.corner(self.row_radius, "row_radius"),
                 )
             if disabled:
@@ -591,7 +591,11 @@ class Listbox(CanvasWidget):
             if self.is_disabled():
                 thumb = self.part("scrollbar_track_color", "track")
             elif self._bar_hover or self._bar_drag_offset is not None:
-                thumb = self.part("scrollbar_thumb_hover_color", "thumb_hover")
+                thumb = self.hover_part(
+                    "scrollbar_thumb_hover_color",
+                    "scrollbar_thumb_color",
+                    "thumb_hover",
+                )
             else:
                 thumb = self.part("scrollbar_thumb_color", "thumb")
             self.draw_box(

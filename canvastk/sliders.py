@@ -255,7 +255,7 @@ class Scale(_Slider):
             fill = self.part("thumb_color", "surface")
         elif self._hovered or self._pressed:
             outline = self.part("thumb_hover_border_color", "accent")
-            fill = self.part("thumb_hover_color", "accent_hover")
+            fill = self.hover_part("thumb_hover_color", "thumb_color", "accent_hover")
         else:
             outline = self.part("thumb_border_color", "accent")
             fill = self.part("thumb_color", "surface")
@@ -843,7 +843,7 @@ class Scrollbar(CanvasWidget):
         if self.is_disabled():
             fill = self.part("disabled_thumb_color", "track")
         elif self._pressed or self._hovered:
-            fill = self.part("thumb_hover_color", "thumb_hover")
+            fill = self.hover_part("thumb_hover_color", "thumb_color", "thumb_hover")
         else:
             fill = self.part("thumb_color", "thumb")
         if vertical:

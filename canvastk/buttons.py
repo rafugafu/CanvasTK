@@ -503,7 +503,7 @@ class Checkbutton(_ToggleButton):
         elif self.is_disabled():
             fill = self.part("disabled_unchecked_color", "surface_disabled")
         elif self._hovered:
-            fill = self.part("hover_color", "surface_hover")
+            fill = self.hover_part("hover_color", "unchecked_color", "surface_hover")
         else:
             fill = self.part("unchecked_color", "surface")
         # The check mark and corner radius were designed for an 18 px box; scale them to
@@ -579,7 +579,7 @@ class Radiobutton(_ToggleButton):
         if self.is_disabled():
             fill = self.part("disabled_unchecked_color", "surface_disabled")
         elif self._hovered:
-            fill = self.part("hover_color", "surface_hover")
+            fill = self.hover_part("hover_color", "unchecked_color", "surface_hover")
         else:
             fill = self.part("unchecked_color", "surface")
         size = x2 - x1

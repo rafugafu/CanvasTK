@@ -12,6 +12,7 @@ import tkinter.font as tkfont
 
 from ._core import (
     CanvasWidget,
+    hover_variant,
     layered_theme,
     starting_theme,
     _CANVAS_CHROME_TAG,
@@ -633,6 +634,22 @@ _POPUP_COLOR_THEME_KEYS = {
 }
 
 
+def _apply_popup_color_options(colors, option):
+    """Apply the popup color options of a widget or menu to `colors` (a theme):
+    `option(name)` gives the value of an option, or None. A popup fill color given
+    without a hover color gets the hover variant of it for the hovered row, with the
+    normal text color on it (unless a hover text color is given).
+    """
+    for name, key in _POPUP_COLOR_THEME_KEYS.items():
+        value = option(name)
+        if value:
+            colors[key] = value
+    if option("fill_color") and not option("hover_color"):
+        colors["accent_hover"] = hover_variant(option("fill_color"))
+        if not option("hover_text_color"):
+            colors["accent_text"] = colors["text"]
+
+
 class _DropdownOwner:
     """Opens a _CanvasPopup list below a widget (Combobox, OptionMenu)."""
 
@@ -641,10 +658,9 @@ class _DropdownOwner:
     def popup_colors(self):
         """The widget's colors with its popup_* options applied."""
         colors = dict(self.colors)
-        for name, key in _POPUP_COLOR_THEME_KEYS.items():
-            value = self._theme_overrides.get(f"popup_{name}")
-            if value:
-                colors[key] = value
+        _apply_popup_color_options(
+            colors, lambda name: self._theme_overrides.get(f"popup_{name}")
+        )
         return colors
 
     popup_font = None  # a font for the dropdown list (None = the widget's font)
@@ -867,7 +883,7 @@ class OptionMenu(_DropdownOwner, CanvasWidget):
             border = self.part("focus_color", "focus_ring")
             ow = self.focus_border_width
         elif self._hovered:
-            fill = self.part("hover_fill_color", "surface_hover")
+            fill = self.hover_part("hover_fill_color", "fill_color", "surface_hover")
             border = self.part("hover_border_color", "accent")
             ow = self.border_width
         else:
@@ -933,9 +949,7 @@ class Menu:
         """The colors this menu's popups use when shown from owner: the
         global theme, the owner window's theme, then this menu's own."""
         colors = layered_theme(owner, None, self._theme_overrides)
-        for name, key in _POPUP_COLOR_THEME_KEYS.items():
-            if self._color_options.get(name):
-                colors[key] = self._color_options[name]
+        _apply_popup_color_options(colors, self._color_options.get)
         return colors
 
     @property
@@ -1174,9 +1188,19 @@ class MenuBar(CanvasWidget):
     _COLOR_PARTS = (
         "hover_color",
         "open_color",
+        "open_text_color",
         "text_color",
         "disabled_text_color",
     )
+
+    def hovered_fill(self):
+        """The fill of the hovered label: the hover_color option, else the hover
+        variant of the color the bar sits on (its background).
+        """
+        value = self._theme_overrides.get("hover_color")
+        if value:
+            return self.rc(value)
+        return hover_variant(self._applied_background)
 
     def __init__(self, master, menu=None, theme=None, **kwargs):
         """Create the bar; `menu` is the Menu whose cascade entries become the labels
@@ -1310,7 +1334,7 @@ class MenuBar(CanvasWidget):
                     (
                         self.part("open_color", "accent_hover")
                         if index == self._open_index
-                        else self.part("hover_color", "row_current")
+                        else self.hovered_fill()
                     ),
                     radius=self.colors["small_radius"],
                 )
@@ -1322,7 +1346,11 @@ class MenuBar(CanvasWidget):
                 fill=(
                     self.part("disabled_text_color", "text_disabled")
                     if entry["state"] == "disabled"
-                    else self.part("text_color", "text")
+                    else (
+                        self.part("open_text_color", "accent_text")
+                        if index == self._open_index
+                        else self.part("text_color", "text")
+                    )
                 ),
                 tags=_CANVAS_CHROME_TAG,
             )

@@ -741,6 +741,20 @@ class _WidgetPlumbing:
             return resolve_color(self, value)
         return resolve_color(self, self.colors[default_key])
 
+    def hover_part(self, name, fill_name, default_key):
+        """The color of a hover state, for something drawn in the fill color `fill_name`:
+        the widget's own `name` if set; else, if the widget's own `fill_name` is set,
+        its hover variant (see hover_variant), so the hover is always visible against
+        the color that was given; else the theme color `default_key`.
+        """
+        value = self._theme_overrides.get(name)
+        if value:
+            return resolve_color(self, value)
+        fill = self._theme_overrides.get(fill_name)
+        if fill:
+            return hover_variant(resolve_color(self, fill))
+        return resolve_color(self, self.colors[default_key])
+
     def set_color_part(self, name, value):
         """Set (or, with None, remove) this widget's override for one named color part
         and rebuild its colors.
