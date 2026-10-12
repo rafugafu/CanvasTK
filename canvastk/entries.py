@@ -1106,8 +1106,10 @@ class Textbox(_FramedWidget):
     def _install_change_event(self):
         """Make the tk.Text generate <<TextboxChanged>> whenever its text, its cursor,
         or its view changes, which is what the line numbers follow. The Tcl command of
-        the widget is replaced by one that calls the real one and then generates the
-        event.
+        the widget is replaced by a Tcl procedure that calls the real one and then
+        generates the event. It has to be Tcl: Tk's own bindings call the command inside
+        a catch and expect errors such as "no characters tagged sel", which a Python
+        function would report as an uncaught exception of the program instead.
         """
         if self._change_event_installed:
             return
@@ -1116,34 +1118,26 @@ class Textbox(_FramedWidget):
         name = text._w
         original = name + "_original"
         text.tk.call("rename", name, original)
-
-        def command(*arguments):
-            """Run the real command, then announce a change."""
-            result = text.tk.call((original,) + arguments)
-            if arguments and (
-                arguments[0] in ("insert", "replace", "delete", "configure")
-                or arguments[:3] == ("mark", "set", "insert")
-                or arguments[:2]
-                in (
-                    ("yview", "moveto"),
-                    ("yview", "scroll"),
-                    ("edit", "undo"),
-                    ("edit", "redo"),
-                )
-            ):
-                try:
-                    text.event_generate("<<TextboxChanged>>", when="tail")
-                except tk.TclError:  # the widget is being destroyed
-                    pass
-            return result
-
-        text.tk.createcommand(name, command)
+        text.tk.eval("""
+            proc {name} args {{
+                set result [{original} {{*}}$args]
+                set first [lindex $args 0]
+                set second [lindex $args 1]
+                if {{$first in {{insert replace delete configure}}
+                    || ($first eq "mark" && $second eq "set" && [lindex $args 2] eq "insert")
+                    || ($first eq "yview" && $second in {{moveto scroll}})
+                    || ($first eq "edit" && $second in {{undo redo}})}} {{
+                    catch {{event generate {name} <<TextboxChanged>> -when tail}}
+                }}
+                return $result
+            }}
+            """.format(name=name, original=original))
 
         def forget_command(event):
             """The text is gone: remove the replacement command too."""
             if event.widget is text:
                 try:
-                    text.tk.deletecommand(name)
+                    text.tk.call("rename", name, "")
                 except tk.TclError:
                     pass
 
