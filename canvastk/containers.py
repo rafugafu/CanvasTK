@@ -1160,6 +1160,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         "destroy_on_close",
         "segment_radius",
         "draggable",
+        "style",
     )
     _COLOR_PARTS = (
         "tab_color",
@@ -1210,8 +1211,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         style's tabs (None = the theme's radius and tab_radius; a big number such as
         99 makes the tabs fully rounded pills; the pill behind them follows it).
         draggable: tabs can be reordered by dragging them along the strip."""
-        if style not in ("classic", "segmented"):
-            raise ValueError("style must be 'classic' or 'segmented'")
+        self._check_style(style)
         theme = {**(theme or {}), **pop_color_parts(self._COLOR_PARTS, kwargs)}
         self._fixed_size = "width" in kwargs or "height" in kwargs
         self.background_role = child_background_role(master)
@@ -1288,16 +1288,27 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         """Redraws of the notebook are redraws of its chrome canvas."""
         self.chrome.schedule_redraw()
 
+    @staticmethod
+    def _check_style(style):
+        """Raise ValueError unless `style` is one of the two looks of the tabs."""
+        if style not in ("classic", "segmented"):
+            raise ValueError("style must be 'classic' or 'segmented'")
+
     def apply_settable_options(self, options):
-        """Store changed options; a new font recomputes the tab height; then re-place
-        the page and re-layout.
+        """Store changed options; a new font recomputes the tab height, and a new style
+        the place of the page (the segmented tabs are drawn higher above it); then
+        re-place the page and re-layout.
         """
+        if "style" in options:
+            self._check_style(options["style"])
         for name, value in options.items():
             if name == "font":
                 value = make_font(value)
             setattr(self, name, value)
         if "font" in options:
             self.tab_height = self.font.metrics("linespace") + 16
+        if "style" in options:
+            self._reveal_selected = True
         self._place_selected()
         self._tab_changed()
 
