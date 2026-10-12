@@ -9,6 +9,7 @@ itself to the inner widget, so they work as drop-in replacements.
 
 import re
 import tkinter as tk
+import tkinter.font as tkfont
 
 from ._core import (
     _ChromeCanvas,
@@ -866,20 +867,36 @@ class Textbox(_FramedWidget):
         "yscrollcommand",
         "xscrollcommand",
         "scrollbar_width",
+        "line_numbers",
+        "line_number_font",
+        "line_number_justify",
     )
     _SCROLLBAR_PARTS = {
         "scrollbar_track_color": "track_color",
         "scrollbar_thumb_color": "thumb_color",
         "scrollbar_thumb_hover_color": "thumb_hover_color",
     }
-    _COLOR_PARTS = _FramedWidget._COLOR_PARTS + tuple(_SCROLLBAR_PARTS)
+    _COLOR_PARTS = (
+        _FramedWidget._COLOR_PARTS
+        + tuple(_SCROLLBAR_PARTS)
+        + ("line_number_color", "line_number_current_color", "line_number_fill_color")
+    )
+    # Where a number sits in the gutter for each justify: its x as a function of the
+    # width of the gutter and the padding, and the anchor of the text.
+    _LINE_NUMBER_PLACES = {
+        "left": (lambda width, padding: padding, "sw"),
+        "center": (lambda width, padding: width / 2, "s"),
+        "right": (lambda width, padding: width - padding, "se"),
+    }
+    LINE_NUMBER_PADDING = 8  # px at each side of the numbers
+    LINE_NUMBER_MINIMUM_DIGITS = 3  # the gutter has room for at least this many digits
 
     def __init__(
         self,
         master,
         scrolled=False,
         font=None,
-        wrap="none",
+        wrap="char",
         state="normal",
         width=80,
         height=24,
@@ -887,6 +904,9 @@ class Textbox(_FramedWidget):
         xscrollcommand=None,
         orient="vertical",
         scrollbar_width=None,
+        line_numbers=False,
+        line_number_font=None,
+        line_number_justify="right",
         theme=None,
         radius=None,
         border_width=1,
@@ -902,13 +922,19 @@ class Textbox(_FramedWidget):
         orient: with scrolled, which scroll bars there are: "vertical", "horizontal", or
         "both". yscrollcommand / xscrollcommand: for scroll bars of your own (they work
         together with scrolled). scrollbar_width: the width in px of the built-in scroll
-        bars (14 by default).
+        bars (14 by default). line_numbers: show the number of each line in a gutter at
+        the left of the text (a wrapped line is numbered once); line_number_font: the
+        font of the numbers (None = the font of the text); line_number_justify: "left",
+        "center", or "right" (the default) for where the numbers sit in the gutter. The
+        numbers follow the colors line_number_color, line_number_current_color (the
+        line of the cursor), and line_number_fill_color.
         radius, border_width, focus_border_width: border shape (radius None = the
         theme's). placeholder: hint
         while empty.
         """
         if orient not in ("vertical", "horizontal", "both"):
             raise ValueError("orient must be 'vertical', 'horizontal' or 'both'")
+        self._check_line_number_justify(line_number_justify)
         theme = {**(theme or {}), **self.extract_color_options(kwargs)}
         _FramedWidget.__init__(
             self,
@@ -924,6 +950,14 @@ class Textbox(_FramedWidget):
         # A 1 px cursor: Tk draws a wider one half-clipped at the start of a line.
         kwargs.setdefault("insertwidth", 1)
         self.scrollbar = self.horizontal_scrollbar = None
+        self.scrollbar_width = scrollbar_width
+        self.line_numbers = False
+        self.line_number_font = line_number_font
+        self.line_number_justify = line_number_justify
+        self._gutter = None  # the canvas with the line numbers, once they were shown
+        self._gutter_width = 0
+        self._line_numbers_pending = False
+        self._change_event_installed = False
         self._user_yscrollcommand = yscrollcommand
         self._user_xscrollcommand = xscrollcommand
         text = tk.Text(
@@ -972,24 +1006,37 @@ class Textbox(_FramedWidget):
                     **width_option,
                 )
                 self.scrollbar.pack(side="right", fill="y", padx=(0, 5), pady=5)
-                text.configure(yscrollcommand=self._on_yscroll)
+            self._inner_padx = (7, 2) if vertical else (7, 7)
+            self._inner_pady = (5, 2) if horizontal else (5, 5)
             self.install_inner(
                 text,
                 side="left",
                 fill="both",
                 expand=True,
-                padx=(7, 2) if vertical else 7,
-                pady=(5, 2) if horizontal else 5,
+                padx=self._inner_padx,
+                pady=self._inner_pady,
             )
         else:
-            if yscrollcommand is not None:
-                text.configure(yscrollcommand=yscrollcommand)
             if xscrollcommand is not None:
                 text.configure(xscrollcommand=xscrollcommand)
-            self.install_inner(text, fill="both", expand=True, padx=7, pady=5)
+            self._inner_padx = (7, 7)
+            self._inner_pady = (5, 5)
+            self.install_inner(
+                text,
+                side="left",
+                fill="both",
+                expand=True,
+                padx=self._inner_padx,
+                pady=self._inner_pady,
+            )
+        # The view reports to _on_yscroll: it updates the scroll bar, a scroll bar of
+        # the user's, and the line numbers.
+        text.configure(yscrollcommand=self._on_yscroll)
         text.bind("<Control-a>", self._select_all, add="+")
         self.install_placeholder()
         self.restyle_inner()
+        if line_numbers:
+            self._show_line_numbers(True)
 
     def inner_is_empty(self):
         """Whether the text box holds no text."""
@@ -1010,9 +1057,11 @@ class Textbox(_FramedWidget):
         """The Text scrolled: update the built-in scroll bar and pass it on to a user's
         yscrollcommand.
         """
-        self.scrollbar.set(first, last)
+        if self.scrollbar is not None:
+            self.scrollbar.set(first, last)
         if self._user_yscrollcommand is not None:
             self._user_yscrollcommand(first, last)
+        self._schedule_line_numbers()
 
     def _on_xscroll(self, first, last):
         """The Text scrolled sideways: update the built-in horizontal scroll bar and
@@ -1022,6 +1071,167 @@ class Textbox(_FramedWidget):
         if self._user_xscrollcommand is not None:
             self._user_xscrollcommand(first, last)
 
+    # ---- line numbers -----------------------------------------------------------
+    def _show_line_numbers(self, show):
+        """Show or hide the gutter with the line numbers at the left of the text."""
+        self.line_numbers = bool(show)
+        if show:
+            if self._gutter is None:
+                self._gutter = tk.Canvas(
+                    self, bd=0, highlightthickness=0, takefocus=0, width=1
+                )
+                self._install_change_event()
+                self.inner.bind(
+                    "<<TextboxChanged>>",
+                    lambda _: self._schedule_line_numbers(),
+                    add="+",
+                )
+                self.inner.bind(
+                    "<Configure>", lambda _: self._schedule_line_numbers(), add="+"
+                )
+            left, right = self._inner_padx
+            self._gutter.pack(
+                side="left",
+                fill="y",
+                padx=(left, 0),
+                pady=self._inner_pady,
+                before=self.inner,
+            )
+            self.inner.pack_configure(padx=(2, right))
+            self._schedule_line_numbers()
+        elif self._gutter is not None:
+            self._gutter.pack_forget()
+            self.inner.pack_configure(padx=self._inner_padx)
+
+    def _install_change_event(self):
+        """Make the tk.Text generate <<TextboxChanged>> whenever its text, its cursor,
+        or its view changes, which is what the line numbers follow. The Tcl command of
+        the widget is replaced by one that calls the real one and then generates the
+        event.
+        """
+        if self._change_event_installed:
+            return
+        self._change_event_installed = True
+        text = self.inner
+        name = text._w
+        original = name + "_original"
+        text.tk.call("rename", name, original)
+
+        def command(*arguments):
+            """Run the real command, then announce a change."""
+            result = text.tk.call((original,) + arguments)
+            if arguments and (
+                arguments[0] in ("insert", "replace", "delete", "configure")
+                or arguments[:3] == ("mark", "set", "insert")
+                or arguments[:2]
+                in (
+                    ("yview", "moveto"),
+                    ("yview", "scroll"),
+                    ("edit", "undo"),
+                    ("edit", "redo"),
+                )
+            ):
+                try:
+                    text.event_generate("<<TextboxChanged>>", when="tail")
+                except tk.TclError:  # the widget is being destroyed
+                    pass
+            return result
+
+        text.tk.createcommand(name, command)
+
+        def forget_command(event):
+            """The text is gone: remove the replacement command too."""
+            if event.widget is text:
+                try:
+                    text.tk.deletecommand(name)
+                except tk.TclError:
+                    pass
+
+        text.bind("<Destroy>", forget_command, add="+")
+
+    def _schedule_line_numbers(self):
+        """Redraw the line numbers once the program is idle (any number of requests
+        before that cost one redraw).
+        """
+        if self._gutter is not None and not self._line_numbers_pending:
+            self._line_numbers_pending = True
+            self.call_later(None, self._draw_line_numbers)
+
+    @classmethod
+    def _check_line_number_justify(cls, justify):
+        """Raise ValueError unless `justify` is one of the three places for the numbers."""
+        if justify not in cls._LINE_NUMBER_PLACES:
+            raise ValueError("line_number_justify must be 'left', 'center' or 'right'")
+
+    @staticmethod
+    def _line_number_font_object(spec):
+        """The font of the numbers: the very font object when `spec` is the name of a
+        named font (so it follows a font that is changed later, like the text does),
+        else a font made from the description.
+        """
+        if isinstance(spec, str):
+            try:
+                return tkfont.nametofont(spec)
+            except tk.TclError:  # not a name: a description such as "Courier 12"
+                pass
+        return make_font(spec)
+
+    def _draw_line_numbers(self):
+        """Draw the number of every line that shows in the text: a line that wraps is
+        numbered at its first row, and the line of the cursor in its own color.
+        """
+        self._line_numbers_pending = False
+        gutter = self._gutter
+        if gutter is None or not self.line_numbers:
+            return
+        text = self.inner
+        font = self._line_number_font_object(self.line_number_font or text.cget("font"))
+        disabled = self.inner_state() == "disabled"
+        override = self._theme_overrides.get("line_number_fill_color")
+        fill = self.rc(override) if override else self.field_fill(disabled)
+        color = self.part("line_number_color", "text_muted")
+        current_color = self.part("line_number_current_color", "text")
+        digits = max(
+            self.LINE_NUMBER_MINIMUM_DIGITS,
+            len(text.index("end-1c").split(".")[0]),
+        )
+        width = font.measure("0") * digits + 2 * self.LINE_NUMBER_PADDING
+        if width != self._gutter_width:
+            self._gutter_width = width
+            gutter.configure(width=width)
+        gutter.configure(bg=fill)
+        gutter.delete("all")
+        gutter.create_line(
+            width - 1,
+            0,
+            width - 1,
+            gutter.winfo_height(),
+            fill=self.colors["separator"],
+        )
+        cursor_line = int(text.index("insert").split(".")[0])
+        descent = font.metrics("descent")
+        place_x, anchor = self._LINE_NUMBER_PLACES[self.line_number_justify]
+        x = place_x(width, self.LINE_NUMBER_PADDING)
+        # The lines that show, from the one at the top to the one at the bottom. A line
+        # that wraps is numbered once, at its first row, and not at all while that row
+        # is scrolled out of sight; a line that is hidden has no row.
+        first = int(text.index("@0,0").split(".")[0])
+        last = int(text.index(f"@0,{max(text.winfo_height(), 1)}").split(".")[0])
+        for line in range(first, last + 1):
+            row = text.dlineinfo(f"{line}.0")
+            if row is None:
+                continue
+            # The bottom of the number sits where the text's baseline and descent are.
+            bottom = row[1] + row[4] + descent
+            gutter.create_text(
+                x,
+                bottom,
+                text=str(line),
+                font=font,
+                fill=current_color if line == cursor_line else color,
+                anchor=anchor,
+            )
+
     def apply_own_options(self, options):
         """Store changed own options; scroll bar colors are also applied to the built-in
         scroll bar.
@@ -1029,8 +1239,15 @@ class Textbox(_FramedWidget):
         for key, value in options.items():
             if key == "yscrollcommand":
                 self._user_yscrollcommand = value
-                if self.scrollbar is None:
-                    self.inner.configure(yscrollcommand=value)
+            elif key == "line_numbers":
+                self._show_line_numbers(value)
+            elif key == "line_number_font":
+                self.line_number_font = value
+                self._schedule_line_numbers()
+            elif key == "line_number_justify":
+                self._check_line_number_justify(value)
+                self.line_number_justify = value
+                self._schedule_line_numbers()
             elif key == "xscrollcommand":
                 self._user_xscrollcommand = value
                 if self.horizontal_scrollbar is None:
@@ -1042,6 +1259,8 @@ class Textbox(_FramedWidget):
                         bar.configure(thickness=value)
             elif key in self._COLOR_PARTS:
                 self.set_color_part(key, value)
+                if key.startswith("line_number"):
+                    self._schedule_line_numbers()
                 if key in self._SCROLLBAR_PARTS:
                     for bar in (self.scrollbar, self.horizontal_scrollbar):
                         if bar is not None:
@@ -1071,3 +1290,4 @@ class Textbox(_FramedWidget):
             inactiveselectbackground=selection,
         )
         tk.Frame.configure(self, bg=fill)
+        self._schedule_line_numbers()

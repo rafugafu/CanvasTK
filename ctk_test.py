@@ -269,6 +269,7 @@ def build_demo():
         pane,
         scrolled=True,
         orient="both",
+        line_numbers=True,
         wrap="none",
         width=30,
         height=10,
@@ -279,6 +280,24 @@ def build_demo():
     )
     textbox.insert("end", "\nA scrolled textbox." * 40)
     pane.add(textbox, weight=1)
+    # Word wrapping: a wrapped line is numbered once, at its first row.
+    wrapped = Textbox(
+        pane,
+        scrolled=True,
+        wrap="word",
+        line_numbers=True,
+        line_number_justify="left",
+        width=30,
+        height=10,
+    )
+    wrapped.insert(
+        "1.0",
+        "A line that is long enough to wrap onto several rows of the text box. " * 6
+        + "\nA short line.\n"
+        + "Another long line that wraps around, as every line does in a text box with word wrapping. "
+        * 4,
+    )
+    pane.add(wrapped, weight=1)
     listbox = Listbox(
         pane,
         [f"Item {n}" for n in range(1, 60)],
