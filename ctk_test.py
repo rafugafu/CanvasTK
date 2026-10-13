@@ -133,6 +133,16 @@ def build_demo():
     add_row("Solid dropdown", solid_menu)
     solid_on = tk.IntVar(inputs, value=1)
     add_row(
+        "Disabled dropdown",
+        OptionMenu(inputs, None, "Disabled", "Disabled", "Dropdown", state="disabled"),
+    )
+    add_row(
+        "Disabled solid dropdown",
+        OptionMenu(
+            inputs, None, "Disabled", "Disabled", "Solid", solid=True, state="disabled"
+        ),
+    )
+    add_row(
         "Solid (configure)",
         Checkbutton(
             inputs,
@@ -362,6 +372,34 @@ def build_demo():
     Label(buttons, "A label in a custom font", font=serif_font).grid(
         row=2, column=2, columnspan=2, sticky="w", padx=10, pady=10
     )
+    # Disabled buttons, next to enabled ones to compare: the theme's colors, custom
+    # colors, and a Button that is switched with configure.
+    Label(buttons, "Disabled buttons").grid(
+        row=3, column=0, sticky="w", padx=10, pady=(20, 10)
+    )
+    Button(buttons, "enabled").grid(row=3, column=1, padx=10, pady=(20, 10))
+    Button(buttons, "disabled", state="disabled").grid(
+        row=3, column=2, padx=10, pady=(20, 10)
+    )
+    Button(
+        buttons,
+        "never",
+        default_bg="#FF0000",
+        hover_bg="#F04141",
+        default_fg="white",
+        state="disabled",
+    ).grid(row=3, column=3, padx=10, pady=(20, 10))
+    switched_button = Button(buttons, "switched")
+    switched_button.grid(row=4, column=1, padx=10, pady=10)
+    switched_on = tk.IntVar(buttons, value=1)
+    Checkbutton(
+        buttons,
+        "enabled (configure)",
+        variable=switched_on,
+        command=lambda: switched_button.configure(
+            state="normal" if switched_on.get() else "disabled"
+        ),
+    ).grid(row=4, column=2, columnspan=2, sticky="w", padx=10, pady=10)
 
     # --- Toplevels tab: subwindows with their own themes
     windows_tab = Frame(notebook)
