@@ -127,6 +127,20 @@ def build_demo():
         "Dropdown",
         OptionMenu(inputs, None, "Light", "Light", "Dark", "Solarized"),
     )
+    solid_menu = OptionMenu(
+        inputs, None, "Solid", "Solid", "Filled", "Accent", solid=True
+    )
+    add_row("Solid dropdown", solid_menu)
+    solid_on = tk.IntVar(inputs, value=1)
+    add_row(
+        "Solid (configure)",
+        Checkbutton(
+            inputs,
+            "solid",
+            variable=solid_on,
+            command=lambda: solid_menu.configure(solid=bool(solid_on.get())),
+        ),
+    )
     # Dropdown lists scroll once they would be taller than popup_max_height.
     add_row(
         "Combobox (80 values, max height 180)",
