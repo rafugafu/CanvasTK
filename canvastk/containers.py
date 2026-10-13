@@ -50,8 +50,8 @@ def requested_size_of(widget):
 
 class _ThemedBackground:
     """Gives a tk.Frame-like container a theme-driven background: the role
-    comes from its master (a Notebook page is 'surface', a Window is
-    'window'); containers inside foreign widgets keep a fixed measured color."""
+    comes from its master (a Notebook page and a Window are both 'window'); containers
+    inside foreign widgets keep a fixed measured color."""
 
     _appearance_mode = None  # 'light' / 'dark' for this container and its contents
     _is_theme_scope = True  # its theme and mode apply to everything inside it
@@ -1215,7 +1215,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         theme = {**(theme or {}), **pop_color_parts(self._COLOR_PARTS, kwargs)}
         self._fixed_size = "width" in kwargs or "height" in kwargs
         self.background_role = child_background_role(master)
-        self.child_background_role = "surface"
+        self.child_background_role = "window"
         self._explicit_background = None
         tk.Frame.__init__(
             self,
@@ -1853,7 +1853,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
             self._content_top(),
             width,
             height,
-            self.part("page_color", "surface"),
+            self.part("page_color", "window"),
             border,
             1,
             self.corner(self.radius, "radius"),
@@ -1930,7 +1930,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         drawn over the page's top border so it joins the page.
         """
         tab_height = self.tab_height
-        surface = self.part("page_color", "surface")
+        surface = self.part("page_color", "window")
         selected_fill = (
             self.rc(self._theme_overrides["selected_tab_color"])
             if self._theme_overrides.get("selected_tab_color")
