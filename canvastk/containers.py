@@ -17,6 +17,7 @@ from ._core import (
     starting_theme,
     CanvasWidget,
     _CANVAS_CHROME_TAG,
+    _CANVAS_DEFAULT_APPEARANCE_MODE,
     _CANVAS_THEMED_WIDGETS,
     _ChromeCanvas,
     _WHEEL_SEQUENCES,
@@ -55,6 +56,7 @@ class _ThemedBackground:
 
     _appearance_mode = None  # 'light' / 'dark' for this container and its contents
     _is_theme_scope = True  # its theme and mode apply to everything inside it
+    _isolated = False  # no connection with the theme and mode outside it
 
     def child_background_color(self):
         """A fixed color this container gives its children (or None)."""
@@ -65,6 +67,7 @@ class _ThemedBackground:
         explicit bg), and keep its own theme overrides.
         """
         self._theme_overrides = starting_theme(theme)
+        self._isolated = theme is not None  # given a theme: no connection outside
         if background is None:
             provider = getattr(master, "child_background_color", None)
             background = provider() if provider else None
@@ -77,7 +80,9 @@ class _ThemedBackground:
     def themed_color(self, widget, key):
         """Theme color for key: the global theme, then the containers around it (the
         window, frames), then this container's own overrides."""
-        colors = layered_theme(widget, self._appearance_mode, self._theme_overrides)
+        colors = layered_theme(
+            widget, self._appearance_mode, self._theme_overrides, self._isolated
+        )
         return resolve_color(widget, colors[key])
 
     def initial_background(self, master, background):
@@ -134,7 +139,9 @@ class _ThemedBackground:
 
     def get_theme(self):
         """This container's effective theme (theme key -> color)."""
-        return layered_theme(self, self._appearance_mode, self._theme_overrides)
+        return layered_theme(
+            self, self._appearance_mode, self._theme_overrides, self._isolated
+        )
 
     def set_appearance_mode(self, mode):
         """'light' or 'dark' for this container and everything inside it; None follows
@@ -145,11 +152,22 @@ class _ThemedBackground:
 
     def get_appearance_mode(self):
         """The appearance mode this container uses, 'light' or 'dark'."""
-        return effective_appearance_mode(self, self._appearance_mode)
+        return effective_appearance_mode(self, self._appearance_mode, self._isolated)
 
     def reset_theme(self):
         """Remove every theme change made on this container."""
         self._theme_overrides.clear()
+        self._refresh_scope()
+
+    def reset_full_theme(self):
+        """Reset this container to the library's defaults completely: its own theme is
+        removed, its appearance mode is the default one (light), and it, with everything
+        inside it, has no connection with the theme or mode of the application or of
+        the containers around it any more.
+        """
+        self._theme_overrides.clear()
+        self._appearance_mode = _CANVAS_DEFAULT_APPEARANCE_MODE
+        self._isolated = True
         self._refresh_scope()
 
 
@@ -1065,6 +1083,13 @@ class _FrameColorParts:
         super().reset_theme()
         refresh_theme_inside(self, skip=self)
 
+    def reset_full_theme(self):
+        """Reset this widget to the library's defaults completely, with everything
+        inside it (see Frame.reset_full_theme).
+        """
+        super().reset_full_theme()
+        refresh_theme_inside(self, skip=self)
+
     def set_appearance_mode(self, mode):
         """'light' or 'dark' for this widget and everything inside it; None follows the
         container around it (or the global mode).
@@ -1212,6 +1237,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         99 makes the tabs fully rounded pills; the pill behind them follows it).
         draggable: tabs can be reordered by dragging them along the strip."""
         self._check_style(style)
+        theme_given = theme is not None
         theme = {**(theme or {}), **pop_color_parts(self._COLOR_PARTS, kwargs)}
         self._fixed_size = "width" in kwargs or "height" in kwargs
         self.background_role = child_background_role(master)
@@ -1227,6 +1253,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
             **kwargs,
         )
         self._init_plumbing(theme)
+        self._isolated = theme_given  # a container given a theme
         self.font = make_font(font)
         self.radius = radius
         self.padding = padding
@@ -2100,6 +2127,7 @@ class _Sash(CanvasWidget):
             ),
         )
         self.owner = owner
+        self._theme_owner = owner
         self.index = index
         self._resize_cursor = (
             "sb_h_double_arrow" if orient == "horizontal" else "sb_v_double_arrow"
@@ -2279,12 +2307,14 @@ class Panedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame):
         """Create the panedwindow; orient is 'horizontal' (panes side by side) or
         'vertical' (stacked).
         """
+        theme_given = theme is not None
         theme = {**(theme or {}), **pop_color_parts(self._COLOR_PARTS, kwargs)}
         self.background_role = child_background_role(master)
         self.child_background_role = self.background_role
         kwargs.setdefault("bg", parent_background(master))
         tk.Frame.__init__(self, master, bd=0, highlightthickness=0, **kwargs)
         self._init_plumbing(theme)
+        self._isolated = theme_given  # a container given a theme
         self.orient = orient
         # Each pane is a dict: child widget, weight, and current size in px.
         self._panes = []
@@ -2545,12 +2575,14 @@ class GridPanedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Fram
 
     def __init__(self, master, theme=None, **kwargs):
         """Create an empty grid panedwindow."""
+        theme_given = theme is not None
         theme = {**(theme or {}), **pop_color_parts(self._COLOR_PARTS, kwargs)}
         self.background_role = child_background_role(master)
         self.child_background_role = self.background_role
         kwargs.setdefault("bg", parent_background(master))
         tk.Frame.__init__(self, master, bd=0, highlightthickness=0, **kwargs)
         self._init_plumbing(theme)
+        self._isolated = theme_given  # a container given a theme
         self._pane_tree = None
         # Junctions: the points where a sash meets a perpendicular sash, found
         # again after every layout, and the one currently highlighted.

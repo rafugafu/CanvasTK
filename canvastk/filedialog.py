@@ -29,8 +29,6 @@ import tkinter as tk
 
 from ._core import (
     CanvasWidget,
-    window_appearance_mode,
-    window_theme,
     _CANVAS_CHROME_TAG,
 )
 from . import messagebox
@@ -338,11 +336,8 @@ def quote_names(names):
 
 def _ask_new_folder_name(parent):
     """Ask for the name of a new folder; returns the typed name, or None if cancelled."""
-    window = Toplevel(
-        parent,
-        theme=dict(window_theme(parent)),
-        appearance_mode=window_appearance_mode(parent),
-    )
+    window = Toplevel(parent)
+    window.follow_theme_of(parent)
     window.title("New folder")
     window.resizable(False, False)
     answer = [None]
@@ -616,12 +611,8 @@ class _CompletionDropdown:
         self.hide()
         self.head = head
         owner = self.entry.winfo_toplevel()
-        window = Toplevel(
-            owner,
-            theme=dict(window_theme(owner)),
-            appearance_mode=window_appearance_mode(owner),
-            transient=False,
-        )
+        window = Toplevel(owner, transient=False)
+        window.follow_theme_of(owner)
         window.withdraw()
         window.overrideredirect(True)
         try:
@@ -953,11 +944,8 @@ class _FileDialog:
 
     def _build(self, owner):
         """Create the window and every widget, then show the starting folder."""
-        self.window = window = Toplevel(
-            owner,
-            theme=dict(window_theme(owner)),
-            appearance_mode=window_appearance_mode(owner),
-        )
+        self.window = window = Toplevel(owner)
+        window.follow_theme_of(owner)
         window.title(self.title)
         window.geometry("%dx%d" % self.SIZE)
         window.minsize(580, 380)

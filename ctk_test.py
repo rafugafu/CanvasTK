@@ -463,6 +463,11 @@ def build_demo():
             appearance_mode="light" if get_appearance_mode() == "dark" else "dark",
         ),
     ).pack(anchor="w", padx=14, pady=4)
+    Button(
+        windows_tab,
+        "Default-theme Toplevel (reset_full_theme)",
+        command=lambda: open_toplevel("Default theme").reset_full_theme(),
+    ).pack(anchor="w", padx=14, pady=4)
     Label(windows_tab, "And the main window's theme can change while running:").pack(
         anchor="w", padx=14, pady=(14, 4)
     )

@@ -143,7 +143,8 @@ CANVAS_RADII = {
 
 # Module state: the current mode, the live theme dict (rebuilt in place), and every
 # themed widget/window (weak, so destroyed ones disappear).
-_CANVAS_APPEARANCE_MODE = "light"
+_CANVAS_DEFAULT_APPEARANCE_MODE = "light"  # the mode of the library before any change
+_CANVAS_APPEARANCE_MODE = _CANVAS_DEFAULT_APPEARANCE_MODE
 CANVAS_WIDGET_THEME = {}
 _CANVAS_THEMED_WIDGETS = weakref.WeakSet()
 
@@ -210,11 +211,12 @@ def starting_theme(theme):
     return {k: v for k, v in (theme or {}).items() if v is not None}
 
 
-def _theme_for_mode(mode):
+def _theme_for_mode(mode, user_theme=True):
     """The whole theme for an appearance mode ('light' or 'dark').
 
     Layers, later ones winning: the light or dark palette, the default (blue) accent
-    and the keys derived from it, then the changes made with set_theme().
+    and the keys derived from it, then (unless user_theme is False) the changes made
+    with set_theme().
     """
     dark = mode == "dark"
     theme = dict(CANVAS_RADII)
@@ -228,7 +230,8 @@ def _theme_for_mode(mode):
             dark,
         )
     )
-    theme.update(expand_theme(_CANVAS_USER_THEME, theme, dark))
+    if user_theme:
+        theme.update(expand_theme(_CANVAS_USER_THEME, theme, dark))
     return theme
 
 
@@ -370,33 +373,57 @@ def refresh_theme_inside(root, skip=None):
             pass
 
 
-def effective_appearance_mode(widget, own_mode=None):
-    """The appearance mode that applies to `widget`: its own `own_mode`, else the one of
-    the innermost container around it that has one, else the global mode.
+def _theme_layers(widget, own_mode, own_overrides, own_isolated):
+    """The (mode, theme dict) of everything that decides the theme of something inside
+    `widget`'s containers, outermost first, and whether it is isolated. A window or
+    container that was given a theme (theme=, even an empty one), or anything reset
+    with reset_full_theme(), is isolated: it has no connection with what is outside it,
+    so everything outside it is left out.
     """
-    if own_mode:
-        return own_mode
-    for scope in reversed(theme_scopes(widget)):
-        if scope._appearance_mode:
-            return scope._appearance_mode
-    return _CANVAS_APPEARANCE_MODE
+    layers = [
+        (scope._appearance_mode, scope._theme_overrides, scope._isolated)
+        for scope in theme_scopes(widget)
+    ]
+    layers.append((own_mode, own_overrides, own_isolated))
+    start = max((i for i, layer in enumerate(layers) if layer[2]), default=None)
+    if start is not None:
+        layers = layers[start:]
+    return [(mode, overrides) for mode, overrides, _ in layers], start is not None
 
 
-def layered_theme(widget, own_mode, own_overrides):
+def _layers_mode(layers):
+    """The appearance mode of layers (see _theme_layers): the innermost one that has
+    one, else the application's.
+    """
+    return next((mode for mode, _ in reversed(layers) if mode), None)
+
+
+def effective_appearance_mode(widget, own_mode=None, own_isolated=False):
+    """The appearance mode that applies to `widget`: its own `own_mode`, else the one of
+    the innermost container around it that has one, else the application's mode.
+    """
+    layers, _ = _theme_layers(widget, own_mode, {}, own_isolated)
+    return _layers_mode(layers) or _CANVAS_APPEARANCE_MODE
+
+
+def layered_theme(widget, own_mode, own_overrides, own_isolated=False):
     """The effective theme of something inside `widget`'s containers: the whole theme of
     the appearance mode that applies (see effective_appearance_mode), then the themes
-    of the containers around it, outermost first, then its own `own_overrides`.
+    of the containers around it, outermost first, then its own `own_overrides`. If it
+    or a container is isolated (see _theme_layers) the whole theme is the library's
+    defaults, not the application's.
     """
-    scopes = theme_scopes(widget)
-    mode = effective_appearance_mode(widget, own_mode)
-    theme = dict(
-        CANVAS_WIDGET_THEME
-        if mode == _CANVAS_APPEARANCE_MODE
-        else _theme_for_mode(mode)
-    )
+    layers, isolated = _theme_layers(widget, own_mode, own_overrides, own_isolated)
+    mode = _layers_mode(layers) or _CANVAS_APPEARANCE_MODE
+    if isolated:
+        theme = _theme_for_mode(mode, user_theme=False)
+    elif mode == _CANVAS_APPEARANCE_MODE:
+        theme = dict(CANVAS_WIDGET_THEME)
+    else:
+        theme = _theme_for_mode(mode)
     # The keys that follow from an accent are worked out here, for this mode.
-    for layer in [scope._theme_overrides for scope in scopes] + [own_overrides]:
-        theme.update(expand_theme(layer, theme, mode == "dark"))
+    for _, overrides in layers:
+        theme.update(expand_theme(overrides, theme, mode == "dark"))
     return theme
 
 
@@ -698,12 +725,32 @@ class _WidgetPlumbing:
 
     _COLOR_PARTS = ()
     _appearance_mode = None  # 'light' / 'dark' for this widget alone, else follows
+    _isolated = (
+        False  # no connection with the theme and mode outside it (see reset_full_theme)
+    )
+    _theme_owner = (
+        None  # the widget this part of belongs to, whose mode and isolation it has
+    )
 
     def _merged_colors(self):
         """The theme of the appearance mode that applies, then the window's theme, then
         this widget's own.
         """
-        return layered_theme(self, self._appearance_mode, self._theme_overrides)
+        owner = self._theme_owner
+        mode = self._appearance_mode or (owner and owner._appearance_mode)
+        isolated = self._isolated or bool(owner and owner._isolated)
+        return layered_theme(self, mode, self._theme_overrides, isolated)
+
+    def reset_full_theme(self):
+        """Reset this widget to the library's defaults completely: its own theme and
+        color options are removed, the appearance mode is the default one (light), and
+        it has no connection with the theme or mode of the application or of the
+        containers around it any more.
+        """
+        self._theme_overrides.clear()
+        self._appearance_mode = _CANVAS_DEFAULT_APPEARANCE_MODE
+        self._isolated = True
+        self.refresh_theme()
 
     def set_appearance_mode(self, mode):
         """'light' or 'dark' for this widget alone; None follows its window (or the
@@ -714,7 +761,7 @@ class _WidgetPlumbing:
 
     def get_appearance_mode(self):
         """The appearance mode this widget uses, 'light' or 'dark'."""
-        return effective_appearance_mode(self, self._appearance_mode)
+        return effective_appearance_mode(self, self._appearance_mode, self._isolated)
 
     def _init_plumbing(self, theme):
         """Set up theme state, the pending-call set, and the watched-variable slot.
@@ -1287,8 +1334,9 @@ class _ChromeCanvas(CanvasWidget):
 
     def __init__(self, master, painter, background_from=None, theme=None):
         """Create the 1x1 starting canvas; `painter(canvas, width, height)` does the
-        drawing.
+        drawing. It has the appearance mode and the isolation of the owner (its master).
         """
+        self._theme_owner = master
         super().__init__(
             master, theme=theme, background_from=background_from, width=1, height=1
         )

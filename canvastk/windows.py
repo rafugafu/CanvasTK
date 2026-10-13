@@ -10,6 +10,8 @@ from ._core import (
     _CANVAS_THEMED_WIDGETS,
     check_appearance_mode,
     starting_theme,
+    window_appearance_mode,
+    window_theme,
 )
 from .containers import (
     _ThemedBackground,
@@ -29,7 +31,9 @@ class _ThemedWindow(_ThemedBackground):
 
     def _init_window(self, background, theme, appearance_mode=None):
         """background: a fixed color (bg=), or None to follow the theme.
-        theme: theme-key overrides for this window and every widget in it.
+        theme: the theme keys of this window and every widget in it (even an empty dict).
+        A window given a theme uses only that, over the library's defaults: the theme of the application
+        (set_theme) does not apply to it, and neither does it after reset_theme().
         appearance_mode: 'light' or 'dark' for this window alone (None follows the
         global mode)."""
         self._appearance_mode = check_appearance_mode(appearance_mode)
@@ -37,6 +41,7 @@ class _ThemedWindow(_ThemedBackground):
         # The window's own theme: widgets inside look it up (see layered_theme),
         # between the global theme and their own overrides.
         self._theme_overrides = starting_theme(theme)
+        self._isolated = theme is not None  # given a theme: no connection outside
         self.background_role = None if background else "window"
         self.child_background_role = self.background_role
         self.configure(bg=background or self.themed_color(self, "window"))
@@ -45,6 +50,15 @@ class _ThemedWindow(_ThemedBackground):
     def refresh_theme(self):
         """The theme changed: re-apply the window's background."""
         self.apply_background()
+
+    def follow_theme_of(self, owner):
+        """Give this window the theme, appearance mode, and isolation of the window of
+        `owner` (a widget), so a dialog opened from it looks like it.
+        """
+        self._theme_overrides = dict(window_theme(owner))
+        self._appearance_mode = window_appearance_mode(owner)
+        self._isolated = bool(getattr(owner.winfo_toplevel(), "_isolated", False))
+        self.refresh_theme()
 
 
 class Window(_ThemedWindow, tk.Tk):

@@ -15,6 +15,7 @@ from ._core import (
     hover_variant,
     layered_theme,
     starting_theme,
+    _CANVAS_DEFAULT_APPEARANCE_MODE,
     _blend_colors,
     _CANVAS_CHROME_TAG,
     _WHEEL_SEQUENCES,
@@ -966,6 +967,8 @@ class Menu:
     entryconfigure/post API; submenus open as cascades."""
 
     COLOR_PARTS = tuple(_POPUP_COLOR_THEME_KEYS)
+    _appearance_mode = None  # set by reset_full_theme
+    _isolated = False  # no connection with the theme and mode outside it
     scrollbar_width = None  # the scroll bar width in px of a long menu (None = 12)
 
     def __init__(self, master=None, font=None, theme=None, tearoff=0, **options):
@@ -983,7 +986,9 @@ class Menu:
     def colors_for(self, owner=None):
         """The colors this menu's popups use when shown from owner: the
         global theme, the owner window's theme, then this menu's own."""
-        colors = layered_theme(owner, None, self._theme_overrides)
+        colors = layered_theme(
+            owner, self._appearance_mode, self._theme_overrides, self._isolated
+        )
         _apply_popup_color_options(colors, self._color_options.get)
         return colors
 
@@ -1004,6 +1009,17 @@ class Menu:
     def reset_theme(self):
         """Remove every theme change made on this menu."""
         self._theme_overrides.clear()
+
+    def reset_full_theme(self):
+        """Reset this menu to the library's defaults completely: its theme and color
+        options are removed, and it uses the default appearance mode (light) and the
+        default theme, whatever the application or its window have (from the next time
+        it is shown).
+        """
+        self._theme_overrides.clear()
+        self._color_options.clear()
+        self._appearance_mode = _CANVAS_DEFAULT_APPEARANCE_MODE
+        self._isolated = True
 
     def configure(self, **options):
         """Set (or, with None, reset) the menu's popup color options."""
@@ -1396,6 +1412,9 @@ class MenuBar(CanvasWidget):
 class Tooltip:
     """A hover tooltip for widget (drawn on a canvas in a borderless window)."""
 
+    _appearance_mode = None  # set by reset_full_theme
+    _isolated = False  # no connection with the theme and mode outside it
+
     def __init__(
         self,
         widget,
@@ -1455,7 +1474,9 @@ class Tooltip:
             window.attributes("-topmost", True)
         except tk.TclError:
             pass
-        colors = layered_theme(self.widget, None, self._theme_overrides)
+        colors = layered_theme(
+            self.widget, self._appearance_mode, self._theme_overrides, self._isolated
+        )
         fill = resolve_color(window, colors["tooltip"])
         border = resolve_color(window, colors["border"])
         canvas = tk.Canvas(
@@ -1477,6 +1498,16 @@ class Tooltip:
         y = min(event.y_root + 16, window.winfo_screenheight() - height)
         window.geometry(f"{width}x{height}+{x}+{y}")
         self._window = window
+
+    def reset_full_theme(self):
+        """Reset this tooltip to the library's defaults completely: its theme and colors
+        are removed, and it uses the default appearance mode (light) and the default
+        theme, whatever the application or its window have (from the next time it is
+        shown).
+        """
+        self._theme_overrides.clear()
+        self._appearance_mode = _CANVAS_DEFAULT_APPEARANCE_MODE
+        self._isolated = True
 
     def set_theme(self, theme):
         """Change theme keys for this tooltip only (used the next time it
