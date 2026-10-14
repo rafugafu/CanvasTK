@@ -498,21 +498,22 @@ def build_demo():
     # --- Panes tab: nested horizontal + vertical Panedwindows
     panes_tab = Frame(notebook)
     notebook.add(panes_tab, text="Panes")
-    outer_pane = Panedwindow(panes_tab, orient="horizontal")
+    outer_pane = Panedwindow(panes_tab, orient="horizontal", draggable=True)
     outer_pane.pack(fill="both", expand=True)
     left_list = Listbox(
         outer_pane, [f"Left item {n}" for n in range(1, 40)], width=14, scrolled=True
     )
     outer_pane.add(left_list, weight=0)
-    right_pane = Panedwindow(outer_pane, orient="vertical")
+    right_pane = Panedwindow(outer_pane, orient="vertical", draggable=True)
     outer_pane.add(right_pane, weight=1)
     top_text = Textbox(right_pane, wrap="word", width=30, height=6)
     top_text.insert("1.0", "Drag the grips between the panes.\nThis is the top pane.")
     right_pane.add(top_text, weight=1)
     bottom = Frame(right_pane)
-    Label(bottom, "Bottom pane").pack(anchor="w", padx=10, pady=10)
+    bottom_title = Label(bottom, "Bottom pane (drag this title)")
+    bottom_title.pack(anchor="w", padx=10, pady=10)
     Button(bottom, "A button in a pane").pack(anchor="w", padx=10)
-    right_pane.add(bottom, weight=1)
+    right_pane.add(bottom, weight=1, handle=bottom_title)
 
     # A GridPanedwindow: the same layouts in a single widget, with buttons that split or
     # remove the last pane.
@@ -521,7 +522,7 @@ def build_demo():
     notebook.add(grid_tab, text="Grid panes")
     grid_toolbar = Frame(grid_tab)
     grid_toolbar.pack(fill="x", padx=6, pady=6)
-    grid = GridPanedwindow(grid_tab)
+    grid = GridPanedwindow(grid_tab, draggable=True)
     grid.pack(fill="both", expand=True)
     pane_numbers = iter(range(1, 1000))
 
@@ -535,7 +536,7 @@ def build_demo():
 
     def split_last_pane(orient):
         """Split the last pane of the grid panedwindow in the given direction, adding a new pane."""
-        grid.split(grid.panes()[-1], make_grid_pane(), orient)
+        grid.split(grid.panes()[-1], make_grid_pane(), orient, handle="all")
 
     def remove_last_pane():
         """Remove (and destroy) the last pane of the grid panedwindow, keeping at least one."""
@@ -564,9 +565,9 @@ def build_demo():
     grid_text.insert("1.0", "A pane that was split horizontally from the list.")
     grid.split(grid_list, grid_text, "horizontal")
     grid_bottom = make_grid_pane()
-    grid.split(grid_text, grid_bottom, "vertical")
+    grid.split(grid_text, grid_bottom, "vertical", handle="all")
     # The bottom pane can be split horizontally too, in the same widget.
-    grid.split(grid_bottom, make_grid_pane(), "horizontal")
+    grid.split(grid_bottom, make_grid_pane(), "horizontal", handle="all")
 
     # The canvastk file dialogs and message boxes: the same functions and options as
     # tkinter.filedialog and tkinter.messagebox.

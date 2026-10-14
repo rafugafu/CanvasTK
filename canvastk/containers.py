@@ -2287,12 +2287,178 @@ class _PaneMeasuring:
         self._layout()
 
 
-class Panedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame):
+class _PaneDragging:
+    """Dragging panes to other places, like dragging the tabs of a Notebook, shared by
+    Panedwindow and GridPanedwindow. With draggable=True, pressing on a pane's handle
+    and moving the pointer more than a few pixels picks the pane up; the class using it
+    decides what the pointer over other panes means (see its docstring). Dropping
+    generates <<PanedwindowPaneMoved>> if the pane was moved.
+
+    The handles of a pane (set when adding it, or with pane_handle()) say what picks
+    it up. Each is 'frame' (the pane widget itself, not the widgets inside it; the
+    default), 'all' (the pane widget and everything inside it), or a widget inside the
+    pane (that widget and what is inside it, such as a title bar); a list of them
+    makes any of them a handle.
+
+    The class using it provides panes(), _drag_over(pane, root_x, root_y) (the pointer
+    moved while dragging; returns whether the panes were rearranged),
+    _drop_pane(pane, root_x, root_y) (the pointer was released; returns whether the
+    panes were rearranged), and _end_pane_drag().
+    """
+
+    _SETTABLE_OPTIONS = ("draggable",)
+
+    # The pointer must move this many px before a press becomes a drag.
+    DRAG_DISTANCE = 6
+
+    def _init_pane_dragging(self, draggable):
+        """Set up the dragging; the mouse is followed on the whole window so that a
+        handle can be any widget inside a pane.
+        """
+        self.draggable = draggable
+        self._pane_handles = {}  # str(pane) -> a tuple of 'frame' | 'all' | a widget
+        self._pane_drag = None
+        self._pane_drag_window = self.winfo_toplevel()
+        handlers = (
+            ("<ButtonPress-1>", self._on_pane_press),
+            ("<B1-Motion>", self._on_pane_drag),
+            ("<ButtonRelease-1>", self._on_pane_drop),
+        )
+        self._pane_drag_bindings = [
+            (sequence, self._pane_drag_window.bind(sequence, handler, add="+"))
+            for sequence, handler in handlers
+        ]
+
+    @staticmethod
+    def _check_handle(handle):
+        """`handle` (one handle or a list of them) as a tuple; raise ValueError unless
+        every one is 'frame', 'all', or a widget.
+        """
+        handles = tuple(handle) if isinstance(handle, (list, tuple)) else (handle,)
+        if not handles:
+            raise ValueError("a list of handles cannot be empty")
+        for each in handles:
+            if each not in ("frame", "all") and not isinstance(each, tk.Misc):
+                raise ValueError("a handle must be 'frame', 'all', or a widget")
+        return handles
+
+    def _set_handle(self, pane, handle):
+        """Make `handle` (one or a list) the handle of a pane widget."""
+        self._pane_handles[str(pane)] = self._check_handle(handle)
+
+    def _handle_key(self, pane):
+        """What identifies a pane in the handle table (a pane widget or its number)."""
+        return str(self.panes()[pane] if isinstance(pane, int) else pane)
+
+    def pane_handle(self, pane, handle=None):
+        """The handle of a pane (a single handle as given, or a tuple when it has
+        several); with `handle` ('frame', 'all', a widget inside the pane, or a list of
+        them), change it first.
+        """
+        key = self._handle_key(pane)
+        if handle is not None:
+            self._pane_handles[key] = self._check_handle(handle)
+        handles = self._pane_handles.get(key, ("frame",))
+        return handles[0] if len(handles) == 1 else handles
+
+    def _pressed_pane(self, widget):
+        """The pane that a press on `widget` picks up, or None when `widget` is not a
+        handle of its pane.
+        """
+        if isinstance(widget, _Sash):
+            return None
+        chain = []
+        while widget is not None:
+            chain.append(widget)
+            widget = getattr(widget, "master", None)
+        for pane in self.panes():
+            if not any(member is pane for member in chain):
+                continue
+            for handle in self._pane_handles.get(str(pane), ("frame",)):
+                if handle == "all" or (handle == "frame" and chain[0] is pane):
+                    return pane
+                if any(member is handle for member in chain):
+                    return pane
+            return None
+        return None
+
+    def _on_pane_press(self, event):
+        """Mouse down: remember the pane if the press was on one of its handles."""
+        self._pane_drag = None
+        if not self.draggable or not isinstance(event.widget, tk.Misc):
+            return
+        pane = self._pressed_pane(event.widget)
+        if pane is not None:
+            self._pane_drag = {
+                "pane": pane,
+                "widget": event.widget,
+                "x": event.x_root,
+                "y": event.y_root,
+                "active": False,
+                "cursor": "",
+                "moved": False,
+            }
+
+    def _on_pane_drag(self, event):
+        """Dragging: after a few pixels of movement, the pane is carried around."""
+        drag = self._pane_drag
+        if drag is None:
+            return
+        if not drag["active"]:
+            if max(abs(event.x_root - drag["x"]), abs(event.y_root - drag["y"])) < (
+                self.DRAG_DISTANCE
+            ):
+                return
+            drag["active"] = True
+            widget = drag["widget"]
+            drag["cursor"] = str(widget.tk.call(widget._w, "cget", "-cursor"))
+            widget.tk.call(widget._w, "configure", "-cursor", "fleur")
+        if self._drag_over(drag["pane"], event.x_root, event.y_root):
+            drag["moved"] = True
+
+    def _on_pane_drop(self, event):
+        """Mouse up: drop the pane (and announce <<PanedwindowPaneMoved>> if it was
+        moved).
+        """
+        drag, self._pane_drag = self._pane_drag, None
+        if drag is None or not drag["active"]:
+            return
+        widget = drag["widget"]
+        try:
+            widget.tk.call(widget._w, "configure", "-cursor", drag["cursor"])
+        except tk.TclError:
+            pass  # the handle was destroyed during the drag
+        moved = self._drop_pane(drag["pane"], event.x_root, event.y_root)
+        self._end_pane_drag()
+        if moved or drag["moved"]:
+            self.event_generate("<<PanedwindowPaneMoved>>")
+
+    def _forget_handle(self, pane):
+        """A pane was removed: forget its handles."""
+        self._pane_handles.pop(str(pane), None)
+
+    def destroy(self):
+        """Stop following the mouse, then destroy the widget."""
+        for sequence, funcid in self._pane_drag_bindings:
+            try:
+                self._pane_drag_window.unbind(sequence, funcid)
+            except tk.TclError:
+                pass
+        super().destroy()
+
+
+class Panedwindow(
+    _PaneDragging, _PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame
+):
     """Resizable panes separated by draggable canvas-drawn sashes.
 
     Color options: sash_color, sash_active_color (hovered/dragged),
-    grip_color, grip_active_color."""
+    grip_color, grip_active_color.
 
+    draggable=True lets the panes be moved to other places by dragging their handle
+    (see add()); the sizes stay with the places."""
+
+    _SETTABLE_OPTIONS = _PaneDragging._SETTABLE_OPTIONS
     _COLOR_PARTS = (
         "sash_color",
         "sash_active_color",
@@ -2303,9 +2469,12 @@ class Panedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame):
     # No pane can be dragged smaller than this many px.
     MINIMUM_PANE_SIZE = 24
 
-    def __init__(self, master, orient="horizontal", theme=None, **kwargs):
+    def __init__(
+        self, master, orient="horizontal", theme=None, draggable=False, **kwargs
+    ):
         """Create the panedwindow; orient is 'horizontal' (panes side by side) or
-        'vertical' (stacked).
+        'vertical' (stacked). draggable: the panes can be moved by dragging their
+        handles.
         """
         theme_given = theme is not None
         theme = {**(theme or {}), **pop_color_parts(self._COLOR_PARTS, kwargs)}
@@ -2320,6 +2489,7 @@ class Panedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame):
         self._panes = []
         self._sashes = []
         self._user_sized = False  # a sash was moved: the sizes are no longer natural
+        self._init_pane_dragging(draggable)
         self._init_measuring(kwargs)
         tk.Frame.bind(self, "<Configure>", lambda _: self._layout(), add="+")
 
@@ -2339,14 +2509,17 @@ class Panedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame):
                 return index
         raise tk.TclError(f"pane {pane!r} not found")
 
-    def add(self, child, weight=0, **_ignored):
+    def add(self, child, weight=0, handle="frame", **_ignored):
         """Append a pane; weight says how it shares extra space when the window is
-        resized (0 = keeps its size).
+        resized (0 = keeps its size). handle: what moves the pane when the panedwindow
+        is draggable: 'frame' (the pane widget itself), 'all' (anything in the pane),
+        or a widget inside the pane.
         """
-        self.insert("end", child, weight)
+        self.insert("end", child, weight, handle)
 
-    def insert(self, where, child, weight=0, **_ignored):
+    def insert(self, where, child, weight=0, handle="frame", **_ignored):
         """Insert a pane before `where`; it starts at the size it asks for."""
+        self._set_handle(child, handle)
         position = len(self._panes) if where == "end" else self._pane_index(where)
         horizontal = self.orient == "horizontal"
         requested = requested_size_of(child)
@@ -2365,6 +2538,7 @@ class Panedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame):
         """Remove a pane (the widget is kept, not destroyed)."""
         record = self._panes.pop(self._pane_index(pane))
         record["child"].place_forget()
+        self._forget_handle(record["child"])
         if self._sashes:
             self._sashes.pop().destroy()
         self._layout()
@@ -2396,12 +2570,61 @@ class Panedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame):
         """The panes in order."""
         return [record["child"] for record in self._panes]
 
-    def paneconfigure(self, pane, weight=None, **_ignored):
-        """Change a pane's weight."""
+    def paneconfigure(self, pane, weight=None, handle=None, **_ignored):
+        """Change a pane's weight and/or handle."""
         if weight is not None:
             self._panes[self._pane_index(pane)]["weight"] = weight
+        if handle is not None:
+            self.pane_handle(pane, handle)
 
     pane = paneconfigure
+
+    def move(self, pane, position):
+        """Move a pane to a new position (a number or 'end'); the sizes stay with the
+        places, so the panes in between shift one place.
+        """
+        records = self._panes
+        sizes = [record["size"] for record in records]
+        record = records.pop(self._pane_index(pane))
+        target = len(records) if position == "end" else self._pane_index(position)
+        records.insert(min(max(target, 0), len(records)), record)
+        for record, size in zip(records, sizes):
+            record["size"] = size
+        self._user_sized = True
+        self._place_all()
+
+    def _pane_at(self, root_x, root_y):
+        """The pane under a screen position, or None (over a sash or outside)."""
+        horizontal = self.orient == "horizontal"
+        pointer = (
+            (root_x - self.winfo_rootx())
+            if horizontal
+            else (root_y - self.winfo_rooty())
+        )
+        position = 0
+        for record in self._panes:
+            size = round(record["size"])
+            if position <= pointer < position + size:
+                return record["child"]
+            position += size + _Sash.THICKNESS
+        return None
+
+    def _drag_over(self, pane, root_x, root_y):
+        """The pointer moved while dragging a pane: when it is over another pane, the
+        dragged pane takes that pane's place.
+        """
+        other = self._pane_at(root_x, root_y)
+        if other is None or other is pane:
+            return False
+        self.move(pane, self._pane_index(other))
+        return True
+
+    def _drop_pane(self, pane, root_x, root_y):
+        """The pane was dropped: it already is in its place."""
+        return False
+
+    def _end_pane_drag(self):
+        """Nothing is shown while dragging."""
 
     def sashpos(self, index, newpos=None):
         """The position of sash `index` in px; with newpos, move it there first."""
@@ -2550,7 +2773,9 @@ class _PaneSplit:
         return self.grid.is_hot(self, index)
 
 
-class GridPanedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame):
+class GridPanedwindow(
+    _PaneDragging, _PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Frame
+):
     """Resizable panes in one widget that can be split in both directions, as
     often as you like: split any pane horizontally or vertically, and split
     the new panes again. Every split has its own draggable sashes, and where
@@ -2562,8 +2787,12 @@ class GridPanedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Fram
     orient) or add(new_pane, orient) (appended to the whole layout).
 
     Color options: sash_color, sash_active_color (hovered/dragged),
-    grip_color, grip_active_color."""
+    grip_color, grip_active_color.
 
+    draggable=True lets a pane be dragged over another one to swap their places (see
+    the handle option of add() and split()); the sizes stay with the places."""
+
+    _SETTABLE_OPTIONS = _PaneDragging._SETTABLE_OPTIONS
     _COLOR_PARTS = (
         "sash_color",
         "sash_active_color",
@@ -2572,9 +2801,17 @@ class GridPanedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Fram
     )
 
     MINIMUM_PANE_SIZE = 24
+    # Dragging a pane: within this many px of the widget's border, it docks along the
+    # whole side; within this share of a pane's width/height of one of its sides, it
+    # goes beside the pane on that side; the outline of where it goes is this wide.
+    DOCK_BORDER = 18
+    DOCK_SIDE_SHARE = 0.3
+    DROP_OUTLINE_WIDTH = 3
 
-    def __init__(self, master, theme=None, **kwargs):
-        """Create an empty grid panedwindow."""
+    def __init__(self, master, theme=None, draggable=False, **kwargs):
+        """Create an empty grid panedwindow; draggable: the panes can be swapped by
+        dragging their handles.
+        """
         theme_given = theme is not None
         theme = {**(theme or {}), **pop_color_parts(self._COLOR_PARTS, kwargs)}
         self.background_role = child_background_role(master)
@@ -2588,6 +2825,8 @@ class GridPanedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Fram
         # again after every layout, and the one currently highlighted.
         self._junctions = []
         self._hot_junction = None
+        self._drop_outline = [tk.Frame(self) for _ in range(4)]
+        self._init_pane_dragging(draggable)
         self._init_measuring(kwargs)
         tk.Frame.bind(self, "<Configure>", lambda _: self._layout(), add="+")
 
@@ -2647,41 +2886,87 @@ class GridPanedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Fram
         """The panes (child widgets) in layout order."""
         return [node.child for node in self._walk() if isinstance(node, _PaneLeaf)]
 
-    def add(self, child, orient="horizontal"):
+    def add(self, child, orient="horizontal", handle="frame"):
         """Add the first pane, or append `child` to the whole layout: after
         everything along orient ('horizontal' = to the right, 'vertical' =
-        below), sharing the space equally with the existing top-level panes."""
+        below), sharing the space equally with the existing top-level panes.
+        handle: what moves the pane when the panedwindow is draggable: 'frame' (the
+        pane widget itself), 'all' (anything in the pane), or a widget inside the
+        pane."""
+        self._set_handle(child, handle)
         leaf = _PaneLeaf(child)
         if self._pane_tree is None:
             self._pane_tree = leaf
         else:
-            root = self._pane_tree
-            if isinstance(root, _PaneSplit) and root.orient == orient:
-                count = len(root.children)
-                share = 1 / (count + 1)
-                root.fractions = [f * (1 - share) for f in root.fractions] + [share]
-                root.children.append(leaf)
-                leaf.parent = root
-                self._ensure_sashes(root)
-            else:
-                split = _PaneSplit(self, orient)
-                split.children = [root, leaf]
-                split.fractions = [0.5, 0.5]
-                root.parent = split
-                leaf.parent = split
-                self._pane_tree = split
-                self._ensure_sashes(split)
+            self._attach_at_root(leaf, orient, before=False)
         self._layout()
         self._schedule_measure()
 
-    def split(self, target, child, orient="horizontal", before=False, ratio=0.5):
+    def _dock_share(self, orient, leaving=None):
+        """The share of the whole layout a pane docked along `orient` takes: an equal
+        share if the layout is a row/column of that direction already, else half.
+        `leaving` is a leaf that is about to leave the layout (it is not counted).
+        """
+        root = self._pane_tree
+        if leaving is not None and leaving.parent is root and len(root.children) == 2:
+            root = next(child for child in root.children if child is not leaving)
+        if isinstance(root, _PaneSplit) and root.orient == orient:
+            count = len(root.children)
+            if leaving is not None and leaving.parent is root:
+                count -= 1
+            return 1 / (count + 1)
+        return 0.5
+
+    def _attach_at_root(self, leaf, orient, before):
+        """Put a leaf along a whole edge of the layout: after everything along orient
+        (before everything with before=True), sharing the space with the top-level
+        panes.
+        """
+        root = self._pane_tree
+        share = self._dock_share(orient)
+        if isinstance(root, _PaneSplit) and root.orient == orient:
+            scaled = [f * (1 - share) for f in root.fractions]
+            if before:
+                root.fractions = [share] + scaled
+                root.children.insert(0, leaf)
+            else:
+                root.fractions = scaled + [share]
+                root.children.append(leaf)
+            leaf.parent = root
+            self._ensure_sashes(root)
+            return
+        split = _PaneSplit(self, orient)
+        split.children = [leaf, root] if before else [root, leaf]
+        split.fractions = [share, 1 - share] if before else [1 - share, share]
+        root.parent = split
+        leaf.parent = split
+        self._pane_tree = split
+        self._ensure_sashes(split)
+
+    def split(
+        self,
+        target,
+        child,
+        orient="horizontal",
+        before=False,
+        ratio=0.5,
+        handle="frame",
+    ):
         """Split the pane `target` in two: `child` goes beside it, to its
         right ('horizontal') or below it ('vertical'), or to its left / above
         it with before=True. `ratio` is the share of the target's space that
         the new pane takes. The target may already be inside a split of the
-        other direction; only the target's own space is divided."""
-        target_leaf = self._leaf_of(target)
-        leaf = _PaneLeaf(child)
+        other direction; only the target's own space is divided. `handle` is as in
+        add()."""
+        self._set_handle(child, handle)
+        self._insert_beside(
+            self._leaf_of(target), _PaneLeaf(child), orient, before, ratio
+        )
+        self._layout()
+        self._schedule_measure()
+
+    def _insert_beside(self, target_leaf, leaf, orient, before, ratio):
+        """Put a leaf next to a target leaf, taking `ratio` of the target's space."""
         parent = target_leaf.parent
         if parent is not None and parent.orient == orient:
             index = parent.children.index(target_leaf)
@@ -2704,8 +2989,6 @@ class GridPanedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Fram
                 node.children = [target_leaf, leaf]
                 node.fractions = [1 - ratio, ratio]
             self._ensure_sashes(node)
-        self._layout()
-        self._schedule_measure()
 
     def remove(self, pane):
         """Remove a pane (its widget is kept, just no longer shown); the
@@ -2713,25 +2996,182 @@ class GridPanedwindow(_PaneMeasuring, _FrameColorParts, _WidgetPlumbing, tk.Fram
         disappears."""
         leaf = self._leaf_of(pane)
         leaf.child.place_forget()
-        parent = leaf.parent
-        if parent is None:
-            self._pane_tree = None
-        else:
-            index = parent.children.index(leaf)
-            parent.children.pop(index)
-            parent.fractions.pop(index)
-            total = sum(parent.fractions) or 1
-            parent.fractions = [f / total for f in parent.fractions]
-            self._ensure_sashes(parent)
-            if len(parent.children) == 1:
-                only = parent.children[0]
-                self._replace(parent, only)
-                for sash in parent.sashes:
-                    sash.destroy()
+        self._forget_handle(leaf.child)
+        self._detach(leaf)
         self._layout()
         self._schedule_measure()
 
+    def _detach(self, leaf):
+        """Take a leaf out of the tree (its widget is not touched): the space goes to
+        its neighbors, and a split left with one child is replaced by that child.
+        """
+        parent = leaf.parent
+        leaf.parent = None
+        if parent is None:
+            self._pane_tree = None
+            return
+        index = parent.children.index(leaf)
+        parent.children.pop(index)
+        parent.fractions.pop(index)
+        total = sum(parent.fractions) or 1
+        parent.fractions = [f / total for f in parent.fractions]
+        self._ensure_sashes(parent)
+        if len(parent.children) == 1:
+            only = parent.children[0]
+            self._replace(parent, only)
+            for sash in parent.sashes:
+                sash.destroy()
+            parent.sashes = []
+            if isinstance(only, _PaneSplit):
+                self._merge_into_parent(only)
+
+    def _merge_into_parent(self, split):
+        """A split that sits in a split of the same direction becomes part of it: its
+        children (and their shares of its space) go into the parent.
+        """
+        parent = split.parent
+        if parent is None or parent.orient != split.orient:
+            return
+        index = parent.children.index(split)
+        share = parent.fractions[index]
+        parent.children[index : index + 1] = split.children
+        parent.fractions[index : index + 1] = [f * share for f in split.fractions]
+        for child in split.children:
+            child.parent = parent
+        for sash in split.sashes:
+            sash.destroy()
+        split.sashes = []
+        self._ensure_sashes(parent)
+
     forget = remove
+
+    def swap(self, first, second):
+        """Exchange the places of two panes; the sizes stay with the places."""
+        first_leaf, second_leaf = self._leaf_of(first), self._leaf_of(second)
+        first_leaf.child, second_leaf.child = second_leaf.child, first_leaf.child
+        self._layout()
+
+    def _pane_at(self, root_x, root_y):
+        """The pane under a screen position, or None (over a sash or outside)."""
+        for pane in self.panes():
+            if not pane.winfo_ismapped():
+                continue
+            left, top = pane.winfo_rootx(), pane.winfo_rooty()
+            if (
+                left <= root_x < left + pane.winfo_width()
+                and top <= root_y < top + pane.winfo_height()
+            ):
+                return pane
+        return None
+
+    # ---- dragging panes: docking ---------------------------------------------------
+    @staticmethod
+    def _side_rect(left, top, width, height, side, share):
+        """The part of a rectangle on one side of it (`share` of it), or all of it for
+        'center'.
+        """
+        if side == "left":
+            return (left, top, width * share, height)
+        if side == "right":
+            return (left + width * (1 - share), top, width * share, height)
+        if side == "top":
+            return (left, top, width, height * share)
+        if side == "bottom":
+            return (left, top + height * (1 - share), width, height * share)
+        return (left, top, width, height)
+
+    def _drop_zone(self, pane, root_x, root_y):
+        """Where dropping the dragged `pane` at a screen position would put it: None
+        (nowhere), or (target, side, rect). Near the border of the widget, target is
+        None and the pane docks along the whole side; over another pane, near one of
+        its sides the pane goes beside it on that side, and in the middle the two swap
+        places. `rect` is the part of the widget the pane would take, in the widget's
+        coordinates.
+        """
+        if len(self.panes()) < 2:
+            return None
+        x = root_x - self.winfo_rootx()
+        y = root_y - self.winfo_rooty()
+        width, height = self.winfo_width(), self.winfo_height()
+        if not (0 <= x < width and 0 <= y < height):
+            return None
+        gaps = {"left": x, "right": width - 1 - x, "top": y, "bottom": height - 1 - y}
+        side = min(gaps, key=gaps.get)
+        if gaps[side] < self.DOCK_BORDER:
+            orient = "horizontal" if side in ("left", "right") else "vertical"
+            share = self._dock_share(orient, self._leaf_of(pane))
+            return None, side, self._side_rect(0, 0, width, height, side, share)
+        target = self._pane_at(root_x, root_y)
+        if target is None or target is pane:
+            return None
+        left = target.winfo_rootx() - self.winfo_rootx()
+        top = target.winfo_rooty() - self.winfo_rooty()
+        pane_width, pane_height = target.winfo_width(), target.winfo_height()
+        fx, fy = (x - left) / pane_width, (y - top) / pane_height
+        gaps = {"left": fx, "right": 1 - fx, "top": fy, "bottom": 1 - fy}
+        side = min(gaps, key=gaps.get)
+        if gaps[side] >= self.DOCK_SIDE_SHARE:
+            side = "center"
+        return (
+            target,
+            side,
+            self._side_rect(left, top, pane_width, pane_height, side, 0.5),
+        )
+
+    def _show_drop_outline(self, rect):
+        """Outline a rectangle of the widget (where the dragged pane would go), or, with
+        None, remove the outline.
+        """
+        if rect is None:
+            for edge in self._drop_outline:
+                edge.place_forget()
+            return
+        left, top, width, height = (round(value) for value in rect)
+        thickness = min(self.DROP_OUTLINE_WIDTH, width // 2, height // 2)
+        edges = (
+            (left, top, width, thickness),
+            (left, top + height - thickness, width, thickness),
+            (left, top, thickness, height),
+            (left + width - thickness, top, thickness, height),
+        )
+        color = self.part("sash_active_color", "accent")
+        for edge, (x, y, w, h) in zip(self._drop_outline, edges):
+            edge.configure(bg=color)
+            edge.place(x=x, y=y, width=w, height=h)
+            tk.Misc.lift(edge)
+
+    def _drag_over(self, pane, root_x, root_y):
+        """The pointer moved while dragging a pane: outline where it would go."""
+        zone = self._drop_zone(pane, root_x, root_y)
+        self._show_drop_outline(None if zone is None else zone[2])
+        return False
+
+    def _drop_pane(self, pane, root_x, root_y):
+        """The pane was dropped: swap it with the pane under the pointer, put it beside
+        that pane, or dock it along a side of the whole widget. True if it moved.
+        """
+        zone = self._drop_zone(pane, root_x, root_y)
+        if zone is None:
+            return False
+        target, side, _ = zone
+        if side == "center":
+            self.swap(pane, target)
+            return True
+        orient = "horizontal" if side in ("left", "right") else "vertical"
+        before = side in ("left", "top")
+        leaf = self._leaf_of(pane)
+        target_leaf = None if target is None else self._leaf_of(target)
+        self._detach(leaf)
+        if target_leaf is None:
+            self._attach_at_root(leaf, orient, before)
+        else:
+            self._insert_beside(target_leaf, leaf, orient, before, 0.5)
+        self._layout()
+        return True
+
+    def _end_pane_drag(self):
+        """The drag is over: remove the outline."""
+        self._show_drop_outline(None)
 
     # ---- layout ----------------------------------------------------------------
     def _layout(self):
