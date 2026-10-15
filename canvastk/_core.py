@@ -670,6 +670,13 @@ def measure_widths(parent, font, texts):
         canvas.destroy()
 
 
+def shown_text(value):
+    """`value` as the text to show, the way tkinter does: anything that is not a string
+    (a number, say) goes through str(); None stays None (no text).
+    """
+    return value if value is None or isinstance(value, str) else str(value)
+
+
 def measure_content(text, image, font, wraplength=0, gap=6, canvas=None):
     """(width, height) of text with an optional image to its left.
 
@@ -677,6 +684,7 @@ def measure_content(text, image, font, wraplength=0, gap=6, canvas=None):
     than its length divided by the wraplength; so it is measured by `canvas` itself,
     which wraps it exactly as it will be drawn.
     """
+    text = shown_text(text)
     if wraplength and text:
         item = tk.Canvas.create_text(
             canvas, 0, 0, text=text, font=font, width=wraplength, anchor="nw"
@@ -939,6 +947,12 @@ class CanvasWidget(_WidgetPlumbing, tk.Canvas):
     DEFAULT_FONT_SIZE = 11
     DEFAULT_FONT_WEIGHT = "normal"
     _CUSTOM_OPTIONS = ("bg", "background", "fg", "foreground", "state", "font")
+
+    def __setattr__(self, name, value):
+        """The text of a widget is shown the way tkinter shows it: a number given as the
+        text is str() of it.
+        """
+        super().__setattr__(name, shown_text(value) if name == "text" else value)
 
     def __init__(
         self, master, theme=None, takefocus=False, background_from=None, **kwargs
@@ -1267,6 +1281,7 @@ class CanvasWidget(_WidgetPlumbing, tk.Canvas):
         gap=6,
     ):
         """Draw an optional image and text side by side inside box."""
+        text = shown_text(text)
         x1, y1, x2, y2 = box
         text_item = None
         text_width = text_height = 0

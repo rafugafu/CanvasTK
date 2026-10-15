@@ -23,6 +23,7 @@ from ._core import (
     make_font,
     measure_widths,
     resolve_color,
+    shown_text,
     rounded_box_image,
     wheel_direction,
 )
@@ -1432,7 +1433,7 @@ class Tooltip:
         border_color / text_color / font: styling.
         """
         self.widget = widget
-        self.text = text
+        self.text = shown_text(text)
         self.delay = delay
         self.font = font
         self._theme_overrides = starting_theme(theme)
@@ -1465,7 +1466,7 @@ class Tooltip:
         """
         self._after_id = None
         font = make_font(self.font, 10)
-        lines = self.text.split("\n")
+        lines = shown_text(self.text).split("\n")
         width = max(font.measure(line) for line in lines) + 16
         height = len(lines) * font.metrics("linespace") + 10
         window = tk.Toplevel(self.widget)

@@ -27,6 +27,7 @@ from ._core import (
     measure_content,
     parent_background,
     resolve_color,
+    shown_text,
     wheel_direction,
 )
 from .popups import Tooltip
@@ -1429,7 +1430,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         """
         record = {
             "child": child,
-            "text": text,
+            "text": shown_text(text),
             "state": state,
             "image": image,
             "closable": closable,
@@ -1518,6 +1519,8 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         """
         record = self._tab_records[self._record_index(tab_id)]
         if options:
+            if "text" in options:
+                options["text"] = shown_text(options["text"])
             record.update(options)
             if record["state"] != "normal" and self._selected is record["child"]:
                 self._select_neighbor(1) or self._select_neighbor(-1)
