@@ -1186,7 +1186,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         "closable",
         "on_close",
         "destroy_on_close",
-        "segment_radius",
+        "tab_radius",
         "draggable",
         "style",
     )
@@ -1227,7 +1227,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         on_close=None,
         destroy_on_close=True,
         style=None,
-        segment_radius=None,
+        tab_radius=None,
         draggable=False,
         **kwargs,
     ):
@@ -1240,9 +1240,10 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         rounded page, like macOS / customtkinter), 'classic' (folder-like tabs), or
         'underline' (flat compact tabs, as in a code editor, with a bar along
         the bottom of the selected one).
-        radius / segment_radius: the corner radius of the page and of the segmented
-        style's tabs (None = the theme's radius and tab_radius; a big number such as
-        99 makes the tabs fully rounded pills; the pill behind them follows it).
+        radius / tab_radius: the corner radius of the page and of the tabs of the
+        segmented and classic styles (None = the theme's radius and tab_radius; a big
+        number such as 99 makes the segmented tabs fully rounded pills; the pill behind
+        them follows it).
         draggable: tabs can be reordered by dragging them along the strip."""
         self._check_style(style)
         theme_given = theme is not None
@@ -1269,7 +1270,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         self.closable = closable
         self.style = style
         self._shown_style = self.style
-        self.segment_radius = segment_radius
+        self.tab_radius = tab_radius
         self.draggable = draggable
         self._tab_drag = None
         self.on_close = on_close
@@ -1949,11 +1950,11 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
             track_right,
             tab_height,
             self.part("track_color", "neutral"),
-            radius=self.corner(self.segment_radius, "tab_radius") + 3,
+            radius=self.corner(self.tab_radius, "tab_radius") + 3,
         )
         # Segments are 3 px inside the pill on every side.
         segment_height = tab_height - 6
-        segment_radius = self.corner(self.segment_radius, "tab_radius")
+        tab_radius = self.corner(self.tab_radius, "tab_radius")
         for i, record in visible:
             left, right = (v - offset for v in spans[i])
             disabled = record["state"] == "disabled"
@@ -1968,7 +1969,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
                 fill = None
             if fill is not None:
                 chrome.draw_box(
-                    left, 3, right, 3 + segment_height, fill, radius=segment_radius
+                    left, 3, right, 3 + segment_height, fill, radius=tab_radius
                 )
             if selected:
                 color = self.part("selected_tab_text_color", "accent_text")
@@ -2083,6 +2084,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         )
         border = self.part("border_color", "border")
         radius = self.corner(self.radius, "radius")
+        tab_radius = self.corner(self.tab_radius, "tab_radius")
         # The page's top-left corner is square when the first tab is selected (the tab
         # continues it).
         first_selected = bool(visible) and visible[0][0] == selected_index
@@ -2117,7 +2119,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
                 fill,
                 border,
                 1,
-                radius,
+                tab_radius,
                 corners=(True, True, False, False),
             )
             self._draw_tab_label(
@@ -2137,7 +2139,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
                 selected_fill,
                 border,
                 1,
-                radius,
+                tab_radius,
                 corners=(True, True, False, False),
             )
             chrome.create_rectangle(

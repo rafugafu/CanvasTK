@@ -60,8 +60,8 @@ def build_demo():
         command=lambda name: set_theme(CANVAS_COLOR_THEMES[name]),
     ).pack(side="left")
     Label(appearance_row, "Tab corners").pack(side="left", padx=(16, 8))
-    # Each choice sets segment_radius (the segmented tabs; 99 = fully rounded
-    # pills) and radius (the classic tabs and the page corners).
+    # Each choice sets tab_radius (the segmented and classic tabs; 99 = fully
+    # rounded pills) and radius (the page corners).
     tab_corner_radii = {
         "Pill": (99, 16),
         "Round (10)": (10, 10),
@@ -74,7 +74,7 @@ def build_demo():
         "Round (10)",
         *tab_corner_radii,
         command=lambda name: notebook.configure(
-            segment_radius=tab_corner_radii[name][0], radius=tab_corner_radii[name][1]
+            tab_radius=tab_corner_radii[name][0], radius=tab_corner_radii[name][1]
         ),
     ).pack(side="left")
     Label(appearance_row, "Tab style").pack(side="left", padx=(16, 8))
