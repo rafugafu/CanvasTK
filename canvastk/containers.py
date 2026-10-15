@@ -2127,7 +2127,8 @@ class _Sash(CanvasWidget):
             ),
         )
         self.owner = owner
-        self._theme_owner = owner
+        # The widget the sash is part of (for a grid split the owner is not a widget).
+        self._theme_owner = master
         self.index = index
         self._resize_cursor = (
             "sb_h_double_arrow" if orient == "horizontal" else "sb_v_double_arrow"
