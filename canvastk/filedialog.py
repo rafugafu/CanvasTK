@@ -359,8 +359,7 @@ def _ask_new_folder_name(parent):
     window.bind("<Return>", lambda _: finish(True))
     window.bind("<Escape>", lambda _: finish(False))
     window.protocol("WM_DELETE_WINDOW", lambda: finish(False))
-    entry.focus_set()
-    _make_modal(window, parent)
+    _make_modal(window, parent, focus=entry)
     return answer[0]
 
 
@@ -938,7 +937,7 @@ class _FileDialog:
             owner.withdraw()
         try:
             self._build(owner)
-            _make_modal(self.window, owner, self.SIZE)
+            _make_modal(self.window, owner, self.SIZE, focus=self.name_entry)
         finally:
             if temporary_root is not None:
                 temporary_root.destroy()
@@ -1092,7 +1091,6 @@ class _FileDialog:
         self.navigate(self.start_directory)
         if self.initial_name and self.mode == "open":
             self._select_names([self.initial_name])
-        self.name_entry.focus_set()
 
     # ---- file types --------------------------------------------------------------
     @staticmethod

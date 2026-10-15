@@ -97,9 +97,11 @@ def _center_on(window, parent, size=None):
     window.geometry(f"+{x}+{y}")
 
 
-def _make_modal(window, parent, size=None):
+def _make_modal(window, parent, size=None, focus=None):
     """Show `window` above `parent` and block input to the rest of the application
-    until it is destroyed (returns when it is). `size` is as for _center_on().
+    until it is destroyed (returns when it is). `size` is as for _center_on(). `focus`
+    is the widget in the window that gets the keyboard focus (by default the window
+    itself).
     """
     _center_on(window, parent, size)
     try:
@@ -113,7 +115,7 @@ def _make_modal(window, parent, size=None):
         window.grab_set()
     except tk.TclError:  # for example, a window manager that refuses grabs
         pass
-    window.focus_force()
+    (focus or window).focus_force()
     window.wait_window()
     # Closing this window released the grab it took; give it back to the modal window it
     # was opened over, if there was one (never grab a window that was not grabbed before,
