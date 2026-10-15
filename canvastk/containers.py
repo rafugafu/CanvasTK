@@ -68,6 +68,7 @@ class _ThemedBackground:
         explicit bg), and keep its own theme overrides.
         """
         self._theme_overrides = starting_theme(theme)
+        self._creation_theme = dict(self._theme_overrides)  # what reset_theme() keeps
         self._isolated = theme is not None  # given a theme: no connection outside
         if background is None:
             provider = getattr(master, "child_background_color", None)
@@ -156,8 +157,11 @@ class _ThemedBackground:
         return effective_appearance_mode(self, self._appearance_mode, self._isolated)
 
     def reset_theme(self):
-        """Remove every theme change made on this container."""
+        """Remove every theme change made on this container since it was created: it
+        has the theme it was created with again.
+        """
         self._theme_overrides.clear()
+        self._theme_overrides.update(self._creation_theme)
         self._refresh_scope()
 
     def reset_full_theme(self):
@@ -167,6 +171,7 @@ class _ThemedBackground:
         the containers around it any more.
         """
         self._theme_overrides.clear()
+        self._creation_theme = {}
         self._appearance_mode = _CANVAS_DEFAULT_APPEARANCE_MODE
         self._isolated = True
         self._refresh_scope()

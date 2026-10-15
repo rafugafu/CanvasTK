@@ -325,22 +325,12 @@ def window_theme(widget):
         return {}
 
 
-def window_appearance_mode(widget):
-    """The appearance mode of the window that contains widget ('light' or 'dark'), or
-    None if that window follows the global one (or is not a canvastk Window/Toplevel).
-    """
-    if widget is None:
-        return None
-    try:
-        return widget.winfo_toplevel()._appearance_mode
-    except (AttributeError, tk.TclError):
-        return None
-
-
 def theme_scopes(widget):
     """The containers (frames and windows) that hold `widget`, the outermost first: the
     ones whose theme and appearance mode apply to everything inside them. The search
-    stops at the window, so a Toplevel does not inherit from the window it belongs to.
+    goes on past a window to the widget it was made with as its master, so a Toplevel
+    takes the theme and appearance mode of what it belongs to (unless it was given a
+    theme of its own, which cuts it off, see _theme_layers).
     """
     scopes = []
     current = widget
@@ -350,24 +340,20 @@ def theme_scopes(widget):
             scope = getattr(current, "_scope_owner", current)
             if not any(scope is other for other in scopes):
                 scopes.append(scope)
-        if getattr(current, "_is_window", False):
-            break
         current = getattr(current, "master", None)
     scopes.reverse()
     return scopes
 
 
 def refresh_theme_inside(root, skip=None):
-    """Make every themed widget inside the container `root` (not in other windows)
-    re-read its theme, the containers before what they hold. `skip` is left out.
+    """Make every themed widget inside the container `root` (also in the windows made
+    with it or with something inside it) re-read its theme, the containers before what
+    they hold. `skip` is left out.
     """
     inside = []
     for widget in list(_CANVAS_THEMED_WIDGETS):
         current = widget
         while current is not None and current is not root:
-            if getattr(current, "_is_window", False):
-                current = None
-                break
             current = getattr(current, "master", None)
         if current is root and widget is not skip:
             inside.append(widget)
@@ -761,6 +747,7 @@ class _WidgetPlumbing:
         containers around it any more.
         """
         self._theme_overrides.clear()
+        self._creation_theme = {}
         self._appearance_mode = _CANVAS_DEFAULT_APPEARANCE_MODE
         self._isolated = True
         self.refresh_theme()
@@ -784,6 +771,7 @@ class _WidgetPlumbing:
         """
         # An 'accent' in the theme also derives accent_hover, accent_text...
         self._theme_overrides = starting_theme(theme)
+        self._creation_theme = dict(self._theme_overrides)  # what reset_theme() keeps
         self.colors = self._merged_colors()
         _CANVAS_THEMED_WIDGETS.add(self)
         self._pending_calls = set()
@@ -810,8 +798,11 @@ class _WidgetPlumbing:
         return dict(self.colors)
 
     def reset_theme(self):
-        """Remove every color change made on this widget."""
+        """Remove every color change made on this widget since it was created: it has
+        the theme and colors it was created with again.
+        """
         self._theme_overrides.clear()
+        self._theme_overrides.update(self._creation_theme)
         self.refresh_theme()
 
     def on_theme_changed(self):

@@ -434,7 +434,6 @@ class _ColorPickerDialog:
         starting = self._starting_rgb(owner)
         self.hue, self.saturation, self.value = rgb_to_hsv(starting)
         self.window = window = Toplevel(owner)
-        window.follow_theme_of(owner)
         window.title(self.title)
         window.resizable(False, False)
         window.protocol("WM_DELETE_WINDOW", self.cancel)

@@ -73,10 +73,31 @@ _MESSAGE_BOX_OPTIONS = ("parent", "default", "detail", "buttons")
 
 
 def _parent_toplevel(parent):
-    """The window a dialog belongs to: `parent`'s window, or the default root."""
+    """The window a dialog belongs to: `parent`'s window, or, without a parent, the
+    window of the application that has the keyboard focus (else the default root).
+    """
     if parent is None:
         parent = tk._default_root
+        if parent is not None:
+            try:
+                parent = parent.focus_displayof() or parent
+            except (KeyError, tk.TclError):
+                pass
     return parent.winfo_toplevel() if parent is not None else None
+
+
+def _raise_window(window):
+    """Bring a window to the front, above the other windows of the application (a
+    window manager may only give it the focus otherwise): raised, and flipped to
+    always-on-top and back, which window managers treat as a request to raise.
+    """
+    window.lift()
+    try:
+        window.attributes("-topmost", True)
+        window.update_idletasks()
+        window.attributes("-topmost", False)
+    except tk.TclError:
+        pass
 
 
 def _center_on(window, parent, size=None):
@@ -101,7 +122,7 @@ def _make_modal(window, parent, size=None, focus=None):
     """Show `window` above `parent` and block input to the rest of the application
     until it is destroyed (returns when it is). `size` is as for _center_on(). `focus`
     is the widget in the window that gets the keyboard focus (by default the window
-    itself).
+    itself). The window is raised above the others.
     """
     _center_on(window, parent, size)
     try:
@@ -112,6 +133,7 @@ def _make_modal(window, parent, size=None, focus=None):
         previous_grab = None
     try:
         window.wait_visibility()
+        _raise_window(window)
         window.grab_set()
     except tk.TclError:  # for example, a window manager that refuses grabs
         pass
@@ -202,7 +224,6 @@ def _show(title, message, icon, type, **options):
         owner.withdraw()
     try:
         window = Toplevel(owner)
-        window.follow_theme_of(owner)
         window.title(title or "")
         window.resizable(False, False)
         answer = [close_answer]

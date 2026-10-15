@@ -1,7 +1,8 @@
 """Window and Toplevel: tk.Tk / tk.Toplevel whose background and theme follow canvastk.
 
 Both can carry their own theme (theme= / set_theme()), which applies to the
-window and to every canvastk widget inside it.
+window and to every canvastk widget inside it, and, for a Toplevel, to the windows
+made with it or its widgets as their master (a Toplevel follows its master).
 """
 
 import tkinter as tk
@@ -10,8 +11,6 @@ from ._core import (
     _CANVAS_THEMED_WIDGETS,
     check_appearance_mode,
     starting_theme,
-    window_appearance_mode,
-    window_theme,
 )
 from .containers import (
     _ThemedBackground,
@@ -27,8 +26,6 @@ class _ThemedWindow(_ThemedBackground):
     _ThemedBackground).
     """
 
-    _is_window = True  # the search for the containers around a widget stops here
-
     def _init_window(self, background, theme, appearance_mode=None):
         """background: a fixed color (bg=), or None to follow the theme.
         theme: the theme keys of this window and every widget in it (even an empty dict).
@@ -41,6 +38,7 @@ class _ThemedWindow(_ThemedBackground):
         # The window's own theme: widgets inside look it up (see layered_theme),
         # between the global theme and their own overrides.
         self._theme_overrides = starting_theme(theme)
+        self._creation_theme = dict(self._theme_overrides)  # what reset_theme() keeps
         self._isolated = theme is not None  # given a theme: no connection outside
         self.background_role = None if background else "window"
         self.child_background_role = self.background_role
@@ -50,15 +48,6 @@ class _ThemedWindow(_ThemedBackground):
     def refresh_theme(self):
         """The theme changed: re-apply the window's background."""
         self.apply_background()
-
-    def follow_theme_of(self, owner):
-        """Give this window the theme, appearance mode, and isolation of the window of
-        `owner` (a widget), so a dialog opened from it looks like it.
-        """
-        self._theme_overrides = dict(window_theme(owner))
-        self._appearance_mode = window_appearance_mode(owner)
-        self._isolated = bool(getattr(owner.winfo_toplevel(), "_isolated", False))
-        self.refresh_theme()
 
 
 class Window(_ThemedWindow, tk.Tk):
@@ -78,8 +67,9 @@ class Window(_ThemedWindow, tk.Tk):
 
 class Toplevel(_ThemedWindow, tk.Toplevel):
     """A secondary window; its background follows the appearance mode
-    (unless a fixed bg= color is given). It takes theme= and set_theme()
-    like Window, independently of the main window.
+    (unless a fixed bg= color is given). It takes the theme and the appearance mode
+    of its master (the window or container it was made with), and theme= and
+    set_theme() add to them like on Window; a Toplevel given theme= uses only that.
 
     transient (default True) makes it a transient window of its master and
     puts it in the master's window group, so the window manager keeps the

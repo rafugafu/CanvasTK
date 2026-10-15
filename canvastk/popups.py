@@ -34,11 +34,31 @@ from ._core import (
 # =============================================================================
 
 
+# The popups open at the moment (the top one of each chain of submenus; only one can be
+# open at a time), and the applications (Tk interpreters) where the events that close
+# them are followed.
+_OPEN_POPUPS = []
+_POPUP_EVENT_APPLICATIONS = set()
+_POPUP_CLOSING_SEQUENCES = ("<ButtonPress>", "<MouseWheel>", "<FocusIn>")
+
+
+def _close_popups_on_event(event):
+    """Something happened anywhere in the application (a click, the wheel, another
+    widget getting the focus): close the open popups, unless it happened in one.
+    """
+    path = str(event.widget)
+    for popup in list(_OPEN_POPUPS):
+        if popup.armed and not popup.contains(path):
+            popup.close()
+
+
 class _CanvasPopup(tk.Toplevel):
     """A borderless popup list drawn on a canvas. entries is a list of dicts:
     kind ('item'|'command'|'check'|'radio'|'cascade'|'separator'), label,
     accelerator, state, checked, current, submenu (a Menu), invoke (callable).
-    Closes on outside click, Escape, window move, or losing app focus."""
+    Closes on an interaction with anything else (a click, the wheel, or the focus
+    going to another widget, in any window of the application), Escape, window move, or
+    losing app focus; opening one closes the one that is open."""
 
     ROW_PADDING = 10
     SEPARATOR_HEIGHT = 9
@@ -100,6 +120,8 @@ class _CanvasPopup(tk.Toplevel):
         self._cascade_id = None
         self._focus_check_id = None
         self._outside_binding = None
+        self.armed = False  # watching for interactions with anything else (see show)
+        self._arm_id = None
         self._row_height = font.metrics("linespace") + self.ROW_PADDING
         self._measure(min_width)
         self._reveal_current_entry()
@@ -380,19 +402,46 @@ class _CanvasPopup(tk.Toplevel):
             self.focus_force()
         except tk.TclError:
             pass
-        # The top popup watches its owner's window: any click in it, or a move/resize,
-        # closes the popups.
         if self.parent_popup is None:
-            top = self.owner.winfo_toplevel()
-            self._outside_binding = (
-                top,
-                top.bind("<ButtonPress>", lambda _: self.close(), add="+"),
-                top.bind(
-                    "<Configure>",
-                    lambda e, t=top: e.widget is t and self.close(),
-                    add="+",
-                ),
-            )
+            self._watch_for_interactions()
+
+    def _watch_for_interactions(self):
+        """The top popup closes the popup that is open, and closes itself when the owner's
+        window is moved or resized, or when anything outside it is interacted with (see
+        _close_popups_on_event). It only starts to watch once the event that opened it
+        is over, so that the very click that opened it does not close it.
+        """
+        for other in list(_OPEN_POPUPS):
+            other.close()
+        _OPEN_POPUPS.append(self)
+        if id(self.tk) not in _POPUP_EVENT_APPLICATIONS:
+            _POPUP_EVENT_APPLICATIONS.add(id(self.tk))
+            for sequence in _POPUP_CLOSING_SEQUENCES:
+                self.bind_all(sequence, _close_popups_on_event, add="+")
+        top = self.owner.winfo_toplevel()
+        self._outside_binding = (
+            top,
+            top.bind(
+                "<Configure>",
+                lambda e, t=top: e.widget is t and self.close(),
+                add="+",
+            ),
+        )
+        self._arm_id = self.after_idle(self._arm)
+
+    def _arm(self):
+        """Start watching for interactions with anything else."""
+        self.armed = True
+
+    def contains(self, path):
+        """Whether a widget (by its path name) is in this popup or one of its submenus."""
+        popup = self
+        while popup is not None:
+            window = str(popup)
+            if path == window or path.startswith(window + "."):
+                return True
+            popup = popup.child_popup
+        return False
 
     def root_popup(self):
         """The top popup of a chain of cascading submenus (this one if it is the top)."""
@@ -415,14 +464,15 @@ class _CanvasPopup(tk.Toplevel):
         child, self.child_popup = self.child_popup, None
         if child is not None:
             child.close()
-        for identifier in (self._cascade_id, self._focus_check_id):
+        for identifier in (self._cascade_id, self._focus_check_id, self._arm_id):
             if identifier is not None:
                 self.after_cancel(identifier)
         if self._outside_binding is not None:
-            top, press_id, configure_id = self._outside_binding
-            top.unbind("<ButtonPress>", press_id)
+            top, configure_id = self._outside_binding
             top.unbind("<Configure>", configure_id)
             self._outside_binding = None
+        if self in _OPEN_POPUPS:
+            _OPEN_POPUPS.remove(self)
         if self.parent_popup is not None:
             self.parent_popup.child_popup = None
         self.destroy()
@@ -985,6 +1035,7 @@ class Menu:
         self.entries = []
         self.font = font
         self._theme_overrides = starting_theme(theme)
+        self._creation_theme = dict(self._theme_overrides)  # what reset_theme() keeps
         self.configure(**options)
         self._popup = None
         self._observers = []
@@ -1013,8 +1064,9 @@ class Menu:
                 self._theme_overrides[key] = value
 
     def reset_theme(self):
-        """Remove every theme change made on this menu."""
+        """Remove every theme change made on this menu since it was created."""
         self._theme_overrides.clear()
+        self._theme_overrides.update(self._creation_theme)
 
     def reset_full_theme(self):
         """Reset this menu to the library's defaults completely: its theme and color
@@ -1023,6 +1075,7 @@ class Menu:
         it is shown).
         """
         self._theme_overrides.clear()
+        self._creation_theme = {}
         self._color_options.clear()
         self._appearance_mode = _CANVAS_DEFAULT_APPEARANCE_MODE
         self._isolated = True
