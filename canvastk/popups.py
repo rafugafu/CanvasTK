@@ -12,6 +12,7 @@ import tkinter.font as tkfont
 
 from ._core import (
     CanvasWidget,
+    CANVAS_TAB_STYLE_KEYS,
     hover_variant,
     layered_theme,
     starting_theme,
@@ -77,7 +78,11 @@ class _CanvasPopup(tk.Toplevel):
         self.child_popup = None
         self._child_index = None
         self._colors = {
-            key: resolve_color(self, value) if isinstance(value, str) else value
+            key: (
+                resolve_color(self, value)
+                if isinstance(value, str) and key not in CANVAS_TAB_STYLE_KEYS
+                else value
+            )
             for key, value in colors.items()
         }
         self._colors_source = colors
