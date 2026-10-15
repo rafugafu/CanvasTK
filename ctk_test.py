@@ -14,7 +14,7 @@ def build_demo():
     """
     root = Window()
     root.title("Canvas widgets")
-    root.geometry("780x740")
+    root.geometry("1000x800")
 
     # Menus: a menu bar whose cascades are File and View (the File menu has a submenu, a
     # check entry, and a disabled entry).
@@ -76,6 +76,16 @@ def build_demo():
         command=lambda name: notebook.configure(
             segment_radius=tab_corner_radii[name][0], radius=tab_corner_radii[name][1]
         ),
+    ).pack(side="left")
+    Label(appearance_row, "Tab style").pack(side="left", padx=(16, 8))
+    OptionMenu(
+        appearance_row,
+        None,
+        "Segmented",
+        "Segmented",
+        "Classic",
+        "Underline",
+        command=lambda name: notebook.configure(style=name.lower()),
     ).pack(side="left")
 
     # The notebook holding every demo tab; its tabs can be reordered by dragging.

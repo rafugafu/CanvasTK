@@ -141,6 +141,10 @@ CANVAS_RADII = {
     "scrollbar_radius": 99,  # the track and thumb of every scroll bar
 }
 
+# The look of the tabs of a Notebook, a theme key like the radii: 'segmented', 'classic',
+# or 'underline' (a Notebook's own style option wins over it).
+CANVAS_TAB_STYLE_KEYS = {"tab_style": "segmented"}
+
 # Module state: the current mode, the live theme dict (rebuilt in place), and every
 # themed widget/window (weak, so destroyed ones disappear).
 _CANVAS_DEFAULT_APPEARANCE_MODE = "light"  # the mode of the library before any change
@@ -220,6 +224,7 @@ def _theme_for_mode(mode, user_theme=True):
     """
     dark = mode == "dark"
     theme = dict(CANVAS_RADII)
+    theme.update(CANVAS_TAB_STYLE_KEYS)
     theme.update(CANVAS_DARK_PALETTE if dark else CANVAS_LIGHT_PALETTE)
     theme.update(_derive_hover_keys(theme))
     theme.update(
