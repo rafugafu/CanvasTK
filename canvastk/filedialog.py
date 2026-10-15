@@ -920,6 +920,8 @@ class _FileDialog:
         self.sort_descending = False
         self.entries = []
         self.name_filter = ""  # the typed text that narrows the list
+        # The Name field starts with a dot: hidden files are shown while it does.
+        self.typing_hidden = False
         self.last_typed_name = ""  # the Name field as last handled by _on_name_typed
         self._typed = ""
         self._typed_at = 0.0
@@ -996,7 +998,6 @@ class _FileDialog:
 
         # --- middle: places on the left, the sortable file list on the right
         panes = Panedwindow(window, orient="horizontal")
-        panes.pack(fill="both", expand=True, padx=10)
         self.places = default_places()
         self.places_list = Listbox(
             panes, [label for label, _ in self.places], width=15, scrolled=True
@@ -1028,7 +1029,10 @@ class _FileDialog:
 
         # --- bottom: the file name, the file type, and the buttons
         bottom = Frame(window)
-        bottom.pack(fill="x", padx=10, pady=10)
+        # The bottom block is packed before the middle one so that it keeps its room
+        # when the window is smaller than the middle asks for.
+        bottom.pack(side="bottom", fill="x", padx=10, pady=10)
+        panes.pack(fill="both", expand=True, padx=10)
         bottom.grid_columnconfigure(1, weight=1)
         Label(bottom, "Folder:" if self.mode == "directory" else "Name:").grid(
             row=0, column=0, sticky="w"
@@ -1088,7 +1092,7 @@ class _FileDialog:
         self.navigate(self.start_directory)
         if self.initial_name and self.mode == "open":
             self._select_names([self.initial_name])
-        (self.name_entry if self.mode != "open" else self.file_list).focus_set()
+        self.name_entry.focus_set()
 
     # ---- file types --------------------------------------------------------------
     @staticmethod
@@ -1126,7 +1130,7 @@ class _FileDialog:
         _, patterns = self._current_type()
         entries, error = list_directory(
             directory,
-            show_hidden=self.show_hidden.get(),
+            show_hidden=True,
             patterns=patterns,
             directories_only=self.mode == "directory",
         )
@@ -1139,6 +1143,7 @@ class _FileDialog:
         _LAST_FILE_DIALOG_DIRECTORY = directory
         self.entries = entries
         self.name_filter = ""
+        self.typing_hidden = False
         self.name_dropdown.hide()
         self.path_dropdown.hide()
         if push:
@@ -1169,9 +1174,19 @@ class _FileDialog:
             )
         )
 
+    def _visible_entries(self, include_hidden):
+        """The entries of the folder to show: the hidden ones (names starting with a
+        dot) only with the Hidden option, or when `include_hidden` is true.
+        """
+        if include_hidden or self.show_hidden.get():
+            return self.entries
+        return [entry for entry in self.entries if not entry["name"].startswith(".")]
+
     def _populate(self, select=()):
         """Fill the file list from self.entries in the current sort order."""
-        shown = filter_entries(self.entries, self.name_filter)
+        shown = filter_entries(
+            self._visible_entries(self.typing_hidden), self.name_filter
+        )
         ordered = sort_entries(shown, self.sort_column, self.sort_descending)
         self.file_list.delete(0, "end")
         self.file_list.insert("end", *ordered)
@@ -1306,7 +1321,9 @@ class _FileDialog:
                 self._current_type()[1],
             )
         matches = [
-            e for e in self.entries if e["name"].lower().startswith(typed.lower())
+            e
+            for e in self._visible_entries(typed.startswith("."))
+            if e["name"].lower().startswith(typed.lower())
         ]
         return "", sort_entries(matches, "name", False)
 
@@ -1322,6 +1339,9 @@ class _FileDialog:
         # A path (Dir/file, /file, ~/file) or several quoted names do not narrow the list.
         is_path = os.sep in typed or typed.startswith("~")
         filter_text = "" if is_path or '"' in typed or not typed.strip(".") else typed
+        # A name starting with a dot also shows (and completes to) hidden files, but
+        # not inside other folders, where it takes a dot again.
+        typing_hidden = typed.startswith(".") and not is_path and '"' not in typed
         deleting = event.keysym in ("BackSpace", "Delete")
         self.name_dropdown.hide()
         if typed and '"' not in typed:
@@ -1333,8 +1353,9 @@ class _FileDialog:
             if len(matches) > 1:
                 self.name_dropdown.show(matches, head)
         self.last_typed_name = self.name_entry.get()
-        if filter_text != self.name_filter:
+        if filter_text != self.name_filter or typing_hidden != self.typing_hidden:
             self.name_filter = filter_text
+            self.typing_hidden = typing_hidden
             self._populate()
 
     def _pick_name_suggestion(self, item, head):
