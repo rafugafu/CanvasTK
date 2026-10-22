@@ -44,9 +44,17 @@ _POPUP_CLOSING_SEQUENCES = ("<ButtonPress>", "<MouseWheel>", "<FocusIn>")
 
 def _close_popups_on_event(event):
     """Something happened anywhere in the application (a click, the wheel, another
-    widget getting the focus): close the open popups, unless it happened in one.
+    widget getting the focus): close the open popups, unless it happened in one. The
+    focus going to a whole window is the window manager's doing, not an interaction.
     """
-    path = str(event.widget)
+    widget = event.widget
+    if (
+        event.type == tk.EventType.FocusIn
+        and isinstance(widget, tk.Misc)
+        and widget.winfo_toplevel() is widget
+    ):
+        return
+    path = str(widget)
     for popup in list(_OPEN_POPUPS):
         if popup.armed and not popup.contains(path):
             popup.close()
