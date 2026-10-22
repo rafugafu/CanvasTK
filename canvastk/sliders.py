@@ -35,7 +35,8 @@ _METER_SHAPES = {
 
 class _Slider(CanvasWidget):
     """Geometry shared by Scale and Progressbar: a rounded track along one
-    axis, with fractions mapped to pixel positions."""
+    axis, with fractions mapped to pixel positions.
+    """
 
     END_PADDING = 2
 

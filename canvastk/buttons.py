@@ -294,7 +294,8 @@ class Label(CanvasWidget):
 
 class _ToggleButton(CanvasWidget):
     """Shared behavior of Checkbutton and Radiobutton: an indicator on the
-    left, a text label on the right, toggled by click or space."""
+    left, a text label on the right, toggled by click or space.
+    """
 
     _COLOR_PARTS = (
         "text_color",
@@ -335,7 +336,8 @@ class _ToggleButton(CanvasWidget):
     ):
         """indicator_size: the box/circle size in px; indicator_radius: its
         corner radius (None = the default look); spacing: px between the
-        indicator and the text."""
+        indicator and the text.
+        """
         super().__init__(master, theme=theme, takefocus=True, **kwargs)
         self.indicator_size = indicator_size
         self.indicator_radius = indicator_radius

@@ -32,7 +32,8 @@ class _ThemedWindow(_ThemedBackground):
         A window given a theme uses only that, over the library's defaults: the theme of the application
         (set_theme) does not apply to it, and neither does it after reset_theme().
         appearance_mode: 'light' or 'dark' for this window alone (None follows the
-        global mode)."""
+        global mode).
+        """
         self._appearance_mode = check_appearance_mode(appearance_mode)
         self._explicit_background = background
         # The window's own theme: widgets inside look it up (see layered_theme),
@@ -53,7 +54,8 @@ class _ThemedWindow(_ThemedBackground):
 class Window(_ThemedWindow, tk.Tk):
     """The application window; its background follows the appearance mode
     (unless a fixed bg= color is given). theme={...} overrides theme keys for
-    the window and everything in it; change them later with set_theme()."""
+    the window and everything in it; change them later with set_theme().
+    """
 
     def __init__(self, *arguments, theme=None, **kwargs):
         """Create the main window (arguments as tk.Tk); bg= fixes the background color,
@@ -75,7 +77,8 @@ class Toplevel(_ThemedWindow, tk.Toplevel):
     puts it in the master's window group, so the window manager keeps the
     two together (one taskbar entry, minimized and raised with the main
     window, always shown above it). Pass transient=False for a fully
-    independent window."""
+    independent window.
+    """
 
     def __init__(self, *arguments, theme=None, transient=True, **kwargs):
         """Create the subwindow (arguments as tk.Toplevel); bg= / theme= as for Window;

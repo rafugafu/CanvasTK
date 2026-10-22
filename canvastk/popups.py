@@ -66,7 +66,8 @@ class _CanvasPopup(tk.Toplevel):
     accelerator, state, checked, current, submenu (a Menu), invoke (callable).
     Closes on an interaction with anything else (a click, the wheel, or the focus
     going to another widget, in any window of the application), Escape, window move, or
-    losing app focus; opening one closes the one that is open."""
+    losing app focus; opening one closes the one that is open.
+    """
 
     ROW_PADDING = 10
     SEPARATOR_HEIGHT = 9
@@ -88,7 +89,8 @@ class _CanvasPopup(tk.Toplevel):
     ):
         """max_rows / max_height (pixels) limit how tall the list gets; past
         that it scrolls (wheel, keys, or its scroll bar). max_height wins.
-        scrollbar_width: the width of the scroll bar in px (12 by default)."""
+        scrollbar_width: the width of the scroll bar in px (12 by default).
+        """
         tk.Toplevel.__init__(self, owner)
         self.withdraw()
         # A borderless window the window manager leaves alone, kept above everything
@@ -391,7 +393,8 @@ class _CanvasPopup(tk.Toplevel):
     # ---- showing / closing -------------------------------------------------
     def show(self, x, y, flip_y=None, left_x=None):
         """Show with its top-left at (x, y) in screen coordinates; if it
-        would overflow the screen, flip above flip_y / left of left_x."""
+        would overflow the screen, flip above flip_y / left of left_x.
+        """
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
         if x + self.width > screen_width:
@@ -937,7 +940,8 @@ class OptionMenu(_DropdownOwner, CanvasWidget):
 
     def showing_placeholder(self):
         """True while nothing is chosen (the variable is empty) and a
-        placeholder was given."""
+        placeholder was given.
+        """
         return bool(self.placeholder) and str(self.variable.get()) == ""
 
     def redraw(self, width, height):
@@ -1028,7 +1032,8 @@ class OptionMenu(_DropdownOwner, CanvasWidget):
 
 class Menu:
     """A popup menu (not a widget). Mirrors tk.Menu's add_*/insert_*/delete/
-    entryconfigure/post API; submenus open as cascades."""
+    entryconfigure/post API; submenus open as cascades.
+    """
 
     COLOR_PARTS = tuple(_POPUP_COLOR_THEME_KEYS)
     _appearance_mode = None  # set by reset_full_theme
@@ -1038,7 +1043,8 @@ class Menu:
     def __init__(self, master=None, font=None, theme=None, tearoff=0, **options):
         """Color options (fill_color, border_color, hover_color,
         hover_text_color, text_color, disabled_text_color, muted_text_color,
-        separator_color) restyle this menu's popups; others are ignored."""
+        separator_color) restyle this menu's popups; others are ignored.
+        """
         self.master = master
         self.entries = []
         self.font = font
@@ -1050,7 +1056,8 @@ class Menu:
 
     def colors_for(self, owner=None):
         """The colors this menu's popups use when shown from owner: the
-        global theme, the owner window's theme, then this menu's own."""
+        global theme, the owner window's theme, then this menu's own.
+        """
         colors = layered_theme(
             owner, self._appearance_mode, self._theme_overrides, self._isolated
         )
@@ -1064,7 +1071,8 @@ class Menu:
 
     def set_theme(self, theme):
         """Change theme keys for this menu only, dynamically (it takes effect
-        the next time it is shown); None removes a change."""
+        the next time it is shown); None removes a change.
+        """
         for key, value in theme.items():
             if value is None:
                 self._theme_overrides.pop(key, None)
@@ -1578,7 +1586,8 @@ class Tooltip:
 
     def set_theme(self, theme):
         """Change theme keys for this tooltip only (used the next time it
-        shows); None removes a change."""
+        shows); None removes a change.
+        """
         for key, value in theme.items():
             if value is None:
                 self._theme_overrides.pop(key, None)

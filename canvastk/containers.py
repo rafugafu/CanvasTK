@@ -44,7 +44,8 @@ def requested_size_of(widget):
     """(width, height) a container child asks for. A ScrolledFrame, Foldable, or
     LabelFrame is the frame that holds the children, which can be arbitrarily big and
     does not include the header, outline, or scroll bars, so the outer container the
-    parent sees is measured instead."""
+    parent sees is measured instead.
+    """
     if isinstance(widget, (ScrolledFrame, Foldable, LabelFrame)):
         widget = widget.outer
     return widget.winfo_reqwidth(), widget.winfo_reqheight()
@@ -53,7 +54,8 @@ def requested_size_of(widget):
 class _ThemedBackground:
     """Gives a tk.Frame-like container a theme-driven background: the role
     comes from its master (a Notebook page and a Window are both 'window'); containers
-    inside foreign widgets keep a fixed measured color."""
+    inside foreign widgets keep a fixed measured color.
+    """
 
     _appearance_mode = None  # 'light' / 'dark' for this container and its contents
     _is_theme_scope = True  # its theme and mode apply to everything inside it
@@ -81,7 +83,8 @@ class _ThemedBackground:
 
     def themed_color(self, widget, key):
         """Theme color for key: the global theme, then the containers around it (the
-        window, frames), then this container's own overrides."""
+        window, frames), then this container's own overrides.
+        """
         colors = layered_theme(
             widget, self._appearance_mode, self._theme_overrides, self._isolated
         )
@@ -118,7 +121,8 @@ class _ThemedBackground:
         dynamically (all colors, not just the accent); None removes a change. A
         widget's own colors, and the themes of containers inside this one, still win.
         Giving an 'accent' also derives accent_hover, accent_text, focus_ring,
-        selection, and row_current."""
+        selection, and row_current.
+        """
         for key, value in theme.items():
             if value is None:
                 self._theme_overrides.pop(key, None)
@@ -480,7 +484,8 @@ class ScrolledFrame(_ScrolledContent, _ThemedBackground, tk.Frame):
 
     orient: 'vertical' (default), 'horizontal' or 'both'. The mouse wheel
     scrolls vertically (horizontally for orient='horizontal'); Shift+wheel
-    always scrolls horizontally."""
+    always scrolls horizontally.
+    """
 
     def __init__(
         self,
@@ -1249,7 +1254,8 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         segmented and classic styles (None = the theme's radius and tab_radius; a big
         number such as 99 makes the segmented tabs fully rounded pills; the pill behind
         them follows it).
-        draggable: tabs can be reordered by dragging them along the strip."""
+        draggable: tabs can be reordered by dragging them along the strip.
+        """
         self._check_style(style)
         theme_given = theme is not None
         theme = {**(theme or {}), **pop_color_parts(self._COLOR_PARTS, kwargs)}
@@ -1479,7 +1485,8 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
     def close_tab(self, tab_id):
         """Close a tab as its close button would: on_close(child) may veto,
         then the tab is removed (and its page destroyed if destroy_on_close)
-        and <<NotebookTabClosed>> is generated."""
+        and <<NotebookTabClosed>> is generated.
+        """
         child = self._tab_records[self._record_index(tab_id)]["child"]
         if self.on_close is not None and self.on_close(child) is False:
             return
@@ -1664,7 +1671,8 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
 
     def _arrow_under_pointer(self):
         """The arrow the mouse pointer is over right now (read at paint time,
-        so the highlight survives redraws without any new motion event)."""
+        so the highlight survives redraws without any new motion event).
+        """
         chrome = self.chrome
         x = chrome.winfo_pointerx() - chrome.winfo_rootx()
         y = chrome.winfo_pointery() - chrome.winfo_rooty()
@@ -1745,7 +1753,8 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
     # ---- dragging tabs ---------------------------------------------------------
     def move(self, tab_id, position):
         """Move a tab to a new position (a number or 'end'); the selected tab
-        stays selected."""
+        stays selected.
+        """
         records = self._tab_records
         record = records.pop(self._record_index(tab_id))
         target = len(records) if position == "end" else self._record_index(position)
@@ -1800,7 +1809,8 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
     def _layout_tabs(self, width):
         """Tab spans for the current width: (visible, spans, selected_index,
         overflow, available, total) with spans mapping index -> (left, right)
-        before scrolling; also keeps the scroll offset valid."""
+        before scrolling; also keeps the scroll offset valid.
+        """
         visible = [
             (i, r) for i, r in enumerate(self._tab_records) if r["state"] != "hidden"
         ]
@@ -2582,7 +2592,8 @@ class Panedwindow(
     grip_color, grip_active_color.
 
     draggable=True lets the panes be moved to other places by dragging their handle
-    (see add()); the sizes stay with the places."""
+    (see add()); the sizes stay with the places.
+    """
 
     _SETTABLE_OPTIONS = _PaneDragging._SETTABLE_OPTIONS
     _COLOR_PARTS = (
@@ -2859,7 +2870,8 @@ class _PaneLeaf:
 
 class _PaneSplit:
     """A row or column of panes inside a GridPanedwindow. Its children are
-    leaves or further splits, with the share of the space each one takes."""
+    leaves or further splits, with the share of the space each one takes.
+    """
 
     def __init__(self, grid, orient):
         """Create an empty split in the given orientation."""
@@ -2916,7 +2928,8 @@ class GridPanedwindow(
     grip_color, grip_active_color.
 
     draggable=True lets a pane be dragged over another one to swap their places (see
-    the handle option of add() and split()); the sizes stay with the places."""
+    the handle option of add() and split()); the sizes stay with the places.
+    """
 
     _SETTABLE_OPTIONS = _PaneDragging._SETTABLE_OPTIONS
     _COLOR_PARTS = (
@@ -3018,7 +3031,8 @@ class GridPanedwindow(
         below), sharing the space equally with the existing top-level panes.
         handle: what moves the pane when the panedwindow is draggable: 'frame' (the
         pane widget itself), 'all' (anything in the pane), or a widget inside the
-        pane."""
+        pane.
+        """
         self._set_handle(child, handle)
         leaf = _PaneLeaf(child)
         if self._pane_tree is None:
@@ -3083,7 +3097,8 @@ class GridPanedwindow(
         it with before=True. `ratio` is the share of the target's space that
         the new pane takes. The target may already be inside a split of the
         other direction; only the target's own space is divided. `handle` is as in
-        add()."""
+        add().
+        """
         self._set_handle(child, handle)
         self._insert_beside(
             self._leaf_of(target), _PaneLeaf(child), orient, before, ratio
@@ -3119,7 +3134,8 @@ class GridPanedwindow(
     def remove(self, pane):
         """Remove a pane (its widget is kept, just no longer shown); the
         space goes to its neighbors, and a split left with one pane
-        disappears."""
+        disappears.
+        """
         leaf = self._leaf_of(pane)
         leaf.child.place_forget()
         self._forget_handle(leaf.child)

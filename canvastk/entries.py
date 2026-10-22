@@ -46,7 +46,8 @@ class _FramedWidget(_WidgetPlumbing, tk.Frame):
     """A tk.Frame whose canvas chrome (rounded border + fill) sits behind an
     embedded native widget (self.inner). Methods the frame does not have are
     forwarded to the inner widget, so get/insert/delete/yview/tag_* etc. work
-    on the composite directly."""
+    on the composite directly.
+    """
 
     _OWN_OPTIONS = ("radius", "border_width", "focus_border_width", "placeholder")
     _COLOR_PARTS = (
@@ -299,7 +300,8 @@ class _FramedWidget(_WidgetPlumbing, tk.Frame):
     def _placeholder_position(self):
         """Where the hint goes: where the first character would be drawn,
         just right of the text cursor (which sits there in an empty field).
-        Everything is measured from the live widget."""
+        Everything is measured from the live widget.
+        """
         inner = self.inner
         # The cursor is centered on the start of the text, insertwidth wide.
         after_cursor = (
@@ -357,7 +359,8 @@ class _FramedWidget(_WidgetPlumbing, tk.Frame):
 
     def field_fill(self, disabled):
         """The field's background: the placeholder fill color while the
-        placeholder is shown (if one was given), else the normal fill."""
+        placeholder is shown (if one was given), else the normal fill.
+        """
         if disabled:
             return self.part("disabled_fill_color", "surface_disabled")
         override = self._theme_overrides.get("placeholder_fill_color")
@@ -384,7 +387,8 @@ class _FramedWidget(_WidgetPlumbing, tk.Frame):
     def apply_inner_style(self, **options):
         """inner.configure(**options), but only when they differ from what
         was applied last: reconfiguring a Text/Entry on every keystroke makes
-        Tk redraw it (and restart the cursor) for nothing."""
+        Tk redraw it (and restart the cursor) for nothing.
+        """
         if options != getattr(self, "_applied_inner_style", None):
             self._applied_inner_style = options
             self.inner.configure(**options)
@@ -752,7 +756,8 @@ class Spinbox(Entry):
 
     def _allows_typing(self, proposed):
         """validatecommand: whether the text, as it would be after this edit,
-        can be (the beginning of) a valid value."""
+        can be (the beginning of) a valid value.
+        """
         if proposed == "":
             return True
         if self.values is not None:
@@ -861,7 +866,8 @@ class Spinbox(Entry):
 
 class Textbox(_FramedWidget):
     """A multi-line text box with a rounded canvas border and an optional
-    built-in scrollbar. Everything tk.Text offers is forwarded."""
+    built-in scrollbar. Everything tk.Text offers is forwarded.
+    """
 
     _OWN_OPTIONS = _FramedWidget._OWN_OPTIONS + (
         "yscrollcommand",

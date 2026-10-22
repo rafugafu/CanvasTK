@@ -91,7 +91,8 @@ _HOVER_DARKEN_ABOVE_BRIGHTNESS = 186
 def hover_variant(color):
     """A hover color for a button-like color: lighter for dark and medium
     colors (a black button gets lighter), darker for very light ones (a
-    near-white button gets darker), so the change is always visible."""
+    near-white button gets darker), so the change is always visible.
+    """
     color = _as_hex(color)
     if _is_light_color(color, _HOVER_DARKEN_ABOVE_BRIGHTNESS):
         return _blend_colors(color, "#000000", 0.15)
@@ -187,7 +188,8 @@ def expand_theme(theme, base=None, dark=None):
     that follows from it (accent_hover, accent_text, focus_ring, selection,
     row_current...) unless the dict gives that key itself. `base` is the theme
     underneath it (for its surface color), and `dark` says whether the keys are for
-    the dark mode (by default the current appearance mode)."""
+    the dark mode (by default the current appearance mode).
+    """
     expanded = dict(theme)
     if theme.get("accent"):
         base = base or CANVAS_WIDGET_THEME
@@ -291,7 +293,8 @@ def set_theme(theme):
     CANVAS_WIDGET_THEME); a value of None removes that change. Giving an
     'accent' also derives accent_hover, accent_text, focus_ring, selection,
     and row_current unless you give them. The changes survive appearance
-    mode and color theme changes."""
+    mode and color theme changes.
+    """
     for key, value in theme.items():
         if value is None:
             _CANVAS_USER_THEME.pop(key, None)
@@ -316,7 +319,8 @@ def get_theme():
 
 def window_theme(widget):
     """The theme overrides of the window that contains widget (a dict;
-    empty if the window is not a canvastk Window/Toplevel)."""
+    empty if the window is not a canvastk Window/Toplevel).
+    """
     if widget is None:
         return {}
     try:
@@ -442,7 +446,8 @@ def rounded_box_image(
 ):
     """A cached, anti-aliased rounded box (transparent outside the shape)
     as a PhotoImage. fill/outline are '#rrggbb' strings (fill may be None).
-    corners is (top-left, top-right, bottom-right, bottom-left) roundness."""
+    corners is (top-left, top-right, bottom-right, bottom-left) roundness.
+    """
     width = int(width)
     height = int(height)
     if width <= 0 or height <= 0:
@@ -487,7 +492,8 @@ def corner_images(radius, fill, outline, outline_width, corners):
     """The four anti-aliased corner pieces (top-left, top-right, bottom-right,
     bottom-left; each radius x radius) of a rounded box, cached by style only.
     Big boxes are assembled from these plus plain rectangles for the straight
-    edges, so resizing never re-renders an image."""
+    edges, so resizing never re-renders an image.
+    """
     key = (radius, fill, outline, outline_width, corners)
     images = _CORNER_IMAGE_CACHE.get(key)
     if images is not None:
@@ -523,7 +529,8 @@ def corner_images(radius, fill, outline, outline_width, corners):
 
 def cross_image(size, color, background=None, reach=3.5, thickness=1.6):
     """A cached, anti-aliased, perfectly symmetric 'x' (optionally on a round
-    background disc) as a size x size PhotoImage; colors are '#rrggbb'."""
+    background disc) as a size x size PhotoImage; colors are '#rrggbb'.
+    """
     key = ("cross", size, color, background, reach, thickness)
     image = _ROUNDED_BOX_IMAGE_CACHE.get(key)
     if image is not None:
@@ -565,7 +572,8 @@ def cross_image(size, color, background=None, reach=3.5, thickness=1.6):
 
 def load_canvas_image(path, size=None):
     """Load an image file as a PhotoImage (resized to size=(w, h) if given)
-    suitable for the `image` option of Button and Label."""
+    suitable for the `image` option of Button and Label.
+    """
     image = Image.open(path).convert("RGBA")
     if size is not None:
         image = image.resize(size, Image.Resampling.LANCZOS)
@@ -584,7 +592,8 @@ def resolve_color(widget, color):
 
 def child_background_role(master):
     """The theme color role ('window', 'surface'...) children of master get
-    by default, or None if master is not one of these themed containers."""
+    by default, or None if master is not one of these themed containers.
+    """
     return getattr(master, "child_background_role", None)
 
 
@@ -608,7 +617,8 @@ def parent_background(widget):
 def make_font(font=None, size=11, weight="normal"):
     """A tkfont.Font from a Font, a font spec, or None (the default family).
     Fonts built from a spec are shared between widgets (creating a Tk font
-    costs a font-matching lookup, which adds up with hundreds of widgets)."""
+    costs a font-matching lookup, which adds up with hundreds of widgets).
+    """
     if isinstance(font, tkfont.Font):
         return font
     root = tk._default_root
@@ -709,7 +719,8 @@ def _inside(widget, event):
 
 def pop_color_parts(parts, kwargs):
     """Remove the color options named in parts from kwargs and return them
-    (as a dict suitable for a widget's theme overrides)."""
+    (as a dict suitable for a widget's theme overrides).
+    """
     return {name: kwargs.pop(name) for name in parts if name in kwargs}
 
 
@@ -720,7 +731,8 @@ class _WidgetPlumbing:
     Every color a widget draws is a named part (listed in its _COLOR_PARTS,
     e.g. border_color, hover_fill_color): pass it as a keyword argument or to
     configure() to override the theme for that one widget; None goes back to
-    the theme."""
+    the theme.
+    """
 
     _COLOR_PARTS = ()
     _appearance_mode = None  # 'light' / 'dark' for this widget alone, else follows
@@ -785,7 +797,8 @@ class _WidgetPlumbing:
 
     def set_theme(self, theme):
         """Change theme keys (or color options) for this widget only,
-        dynamically; None removes a change. See set_theme() for 'accent'."""
+        dynamically; None removes a change. See set_theme() for 'accent'.
+        """
         for key, value in theme.items():
             if value is None:
                 self._theme_overrides.pop(key, None)
@@ -823,7 +836,8 @@ class _WidgetPlumbing:
 
     def part(self, name, default_key):
         """The color of the named part: the widget's own override if set,
-        else the theme color default_key."""
+        else the theme color default_key.
+        """
         value = self._theme_overrides.get(name)
         if value:
             return resolve_color(self, value)
@@ -864,7 +878,8 @@ class _WidgetPlumbing:
 
     def call_later(self, milliseconds, callback):
         """after()/after_idle() that is cancelled automatically on destroy.
-        milliseconds=None means 'when idle'."""
+        milliseconds=None means 'when idle'.
+        """
 
         def run():
             """Run the callback and forget its after-id (it has fired, so there is
@@ -931,7 +946,8 @@ class _WidgetPlumbing:
 class CanvasWidget(_WidgetPlumbing, tk.Canvas):
     """Base of every purely canvas-drawn widget. Subclasses implement
     redraw(width, height) (and requested_size() if they size to content);
-    redraws are coalesced to one per idle cycle."""
+    redraws are coalesced to one per idle cycle.
+    """
 
     DEFAULT_WIDTH = 100
     DEFAULT_HEIGHT = 30
@@ -1169,7 +1185,8 @@ class CanvasWidget(_WidgetPlumbing, tk.Canvas):
     ):
         """A large rounded box built from cached corner images and plain
         rectangles (the straight edges), so it costs no image rendering at
-        any size."""
+        any size.
+        """
         # Straight edges are whole-pixel rectangles, so the outline width is rounded to
         # whole pixels here.
         border = max(1, round(outline_width)) if outline and outline_width > 0 else 0
