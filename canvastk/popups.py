@@ -35,10 +35,10 @@ from ._core import (
 
 
 # The popups open at the moment (the top one of each chain of submenus; only one can be
-# open at a time), and the applications (Tk interpreters) where the events that close
-# them are followed.
+# open at a time). The events that close them are followed in every Tk application that
+# showed a popup; a Tcl variable of the application says that it already is.
 _OPEN_POPUPS = []
-_POPUP_EVENT_APPLICATIONS = set()
+_POPUP_EVENTS_FOLLOWED = "::canvastk_popup_events_followed"
 _POPUP_CLOSING_SEQUENCES = ("<ButtonPress>", "<MouseWheel>", "<FocusIn>")
 
 
@@ -425,8 +425,8 @@ class _CanvasPopup(tk.Toplevel):
         for other in list(_OPEN_POPUPS):
             other.close()
         _OPEN_POPUPS.append(self)
-        if id(self.tk) not in _POPUP_EVENT_APPLICATIONS:
-            _POPUP_EVENT_APPLICATIONS.add(id(self.tk))
+        if not self.tk.call("info", "exists", _POPUP_EVENTS_FOLLOWED):
+            self.tk.call("set", _POPUP_EVENTS_FOLLOWED, "1")
             for sequence in _POPUP_CLOSING_SEQUENCES:
                 self.bind_all(sequence, _close_popups_on_event, add="+")
         top = self.owner.winfo_toplevel()

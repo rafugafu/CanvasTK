@@ -30,6 +30,19 @@ class Button(CanvasWidget):
     """
 
     _COLOR_PARTS = ("focus_color", "disabled_border_color")
+    # The colors given as plain options (None = the theme's): reset_theme() puts back the
+    # ones the button was created with, reset_full_theme() removes them.
+    _COLORS = (
+        "default_bg",
+        "hover_bg",
+        "press_bg",
+        "default_fg",
+        "hover_fg",
+        "press_fg",
+        "disabled_bg",
+        "disabled_fg",
+        "border_color",
+    )
     DEFAULT_FONT_WEIGHT = "bold"
     DEFAULT_FONT_SIZE = 12
     _CUSTOM_OPTIONS = CanvasWidget._CUSTOM_OPTIONS + (
@@ -100,6 +113,7 @@ class Button(CanvasWidget):
         self.disabled_fg = disabled_fg
         self.border_width = border_width
         self.border_color = border_color
+        self._creation_colors = {name: getattr(self, name) for name in self._COLORS}
         self.radius = radius
         self.press_shrink = press_shrink
         self.padx = padx
@@ -135,6 +149,22 @@ class Button(CanvasWidget):
         self.schedule_redraw()
         if was_pressed and _inside(self, event):
             self.invoke(flash=False)
+
+    def reset_theme(self):
+        """Remove every color change made on this button since it was created, also of
+        its color options.
+        """
+        for name, value in self._creation_colors.items():
+            setattr(self, name, value)
+        super().reset_theme()
+
+    def reset_full_theme(self):
+        """Reset this button to the library's defaults completely, its color options
+        included.
+        """
+        self._creation_colors = dict.fromkeys(self._COLORS)
+        super().reset_full_theme()
+        self.reset_theme()
 
     def invoke(self, flash=True):
         """Run the command (briefly showing the pressed look if flash)."""

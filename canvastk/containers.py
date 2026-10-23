@@ -94,6 +94,7 @@ class _ThemedBackground:
         """The background to create the Tk widget with (explicit, themed role, or
         measured from the master).
         """
+        background = background or self._explicit_background
         if background:
             return background
         if self.background_role:
@@ -847,6 +848,9 @@ class Foldable(_ScrolledContent, _FrameOptions, _ThemedBackground, tk.Frame):
             tk.Frame.grid_remove(self._holder)
         self.header.schedule_redraw()
         if notify:
+            # A window that was never shown has no X window yet, and Tk drops the
+            # events generated for it.
+            self.update_idletasks()
             self.event_generate("<<FoldableToggled>>")
             if self.command is not None:
                 self.command(expanded)
@@ -1536,7 +1540,7 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
                 options["text"] = shown_text(options["text"])
             record.update(options)
             if record["state"] != "normal" and self._selected is record["child"]:
-                self._select_neighbor(1) or self._select_neighbor(-1)
+                self._select_instead_of(record)
             self._tab_changed()
             return None
         return dict(record) if option is None else record[option]
@@ -1548,9 +1552,30 @@ class Notebook(_FrameColorParts, _WidgetPlumbing, tk.Frame):
         self.winfo_toplevel().bind(
             "<Control-Tab>", lambda _: self._select_neighbor(1), add="+"
         )
-        self.winfo_toplevel().bind(
-            "<Control-Shift-Tab>", lambda _: self._select_neighbor(-1), add="+"
-        )
+        # Shift-Tab is the key ISO_Left_Tab on X11, and Tab with Shift elsewhere.
+        for sequence in ("<Control-Shift-Tab>", "<Control-ISO_Left_Tab>"):
+            try:
+                self.winfo_toplevel().bind(
+                    sequence, lambda _: self._select_neighbor(-1), add="+"
+                )
+            except tk.TclError:  # a system without that key
+                pass
+
+    def _select_instead_of(self, record):
+        """The selected tab cannot be selected any more: select the next usable tab, else
+        the previous one (the page is just hidden if there is none).
+        """
+        records = self._tab_records
+        position = records.index(record)
+        usable = [r for r in records if r["state"] == "normal"]
+        after = [r for r in usable if records.index(r) > position]
+        before = [r for r in usable if records.index(r) < position]
+        replacement = (after or before[::-1] or [None])[0]
+        if replacement is None:
+            self._selected = None
+            record["child"].place_forget()
+        else:
+            self.select(replacement["child"])
 
     def _select_neighbor(self, step):
         """Select the next (+1) or previous (-1) usable tab, wrapping around; False if

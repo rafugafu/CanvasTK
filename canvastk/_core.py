@@ -429,7 +429,19 @@ _rebuild_canvas_widget_theme()
 _CANVAS_CHROME_TAG = "chrome"
 _ROUNDED_BOX_SUPERSAMPLE = 4
 _ROUNDED_BOX_CACHE_LIMIT = 600
-_ROUNDED_BOX_IMAGE_CACHE = {}
+# The caches of the images (PhotoImages) belong to the Tk application that made them: a
+# second or a later application cannot use them. They are kept on its root window; the
+# one here is for the time there is no root.
+_IMAGE_CACHES_WITHOUT_ROOT = {}
+
+
+def _image_cache(name):
+    """The dict of cached images called `name` for the current Tk application."""
+    root = tk._default_root
+    holder = _IMAGE_CACHES_WITHOUT_ROOT if root is None else root.__dict__
+    return holder.setdefault("_canvastk_image_cache_" + name, {})
+
+
 # Boxes bigger than this (in px^2) are drawn from corner pieces, not one image.
 _SLICED_BOX_MINIMUM_AREA = 6000
 
@@ -453,7 +465,8 @@ def rounded_box_image(
     if width <= 0 or height <= 0:
         return None
     key = (width, height, radius, fill, outline, outline_width, inset, corners)
-    image = _ROUNDED_BOX_IMAGE_CACHE.get(key)
+    cache = _image_cache("rounded_boxes")
+    image = cache.get(key)
     if image is not None:
         return image
     scale = _ROUNDED_BOX_SUPERSAMPLE
@@ -476,16 +489,13 @@ def rounded_box_image(
     )
     image = ImageTk.PhotoImage(big.resize((width, height), Image.Resampling.LANCZOS))
     # Keep the cache bounded.
-    if len(_ROUNDED_BOX_IMAGE_CACHE) >= _ROUNDED_BOX_CACHE_LIMIT:
+    if len(cache) >= _ROUNDED_BOX_CACHE_LIMIT:
         # Drop the oldest half; widgets still showing an image keep their
         # own reference to it.
-        for old_key in list(_ROUNDED_BOX_IMAGE_CACHE)[: _ROUNDED_BOX_CACHE_LIMIT // 2]:
-            del _ROUNDED_BOX_IMAGE_CACHE[old_key]
-    _ROUNDED_BOX_IMAGE_CACHE[key] = image
+        for old_key in list(cache)[: _ROUNDED_BOX_CACHE_LIMIT // 2]:
+            del cache[old_key]
+    cache[key] = image
     return image
-
-
-_CORNER_IMAGE_CACHE = {}
 
 
 def corner_images(radius, fill, outline, outline_width, corners):
@@ -495,7 +505,8 @@ def corner_images(radius, fill, outline, outline_width, corners):
     edges, so resizing never re-renders an image.
     """
     key = (radius, fill, outline, outline_width, corners)
-    images = _CORNER_IMAGE_CACHE.get(key)
+    cache = _image_cache("corners")
+    images = cache.get(key)
     if images is not None:
         return images
     scale = _ROUNDED_BOX_SUPERSAMPLE
@@ -523,7 +534,7 @@ def corner_images(radius, fill, outline, outline_width, corners):
         small.crop((0, far, radius, size)),
     )
     images = tuple(ImageTk.PhotoImage(piece) for piece in pieces)
-    _CORNER_IMAGE_CACHE[key] = images
+    cache[key] = images
     return images
 
 
@@ -532,7 +543,8 @@ def cross_image(size, color, background=None, reach=3.5, thickness=1.6):
     background disc) as a size x size PhotoImage; colors are '#rrggbb'.
     """
     key = ("cross", size, color, background, reach, thickness)
-    image = _ROUNDED_BOX_IMAGE_CACHE.get(key)
+    cache = _image_cache("rounded_boxes")
+    image = cache.get(key)
     if image is not None:
         return image
     scale = 8
@@ -566,7 +578,7 @@ def cross_image(size, color, background=None, reach=3.5, thickness=1.6):
                 fill=color,
             )
     image = ImageTk.PhotoImage(big.resize((size, size), Image.Resampling.LANCZOS))
-    _ROUNDED_BOX_IMAGE_CACHE[key] = image
+    cache[key] = image
     return image
 
 
